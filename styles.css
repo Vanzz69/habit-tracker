@@ -348,3 +348,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 ::-webkit-scrollbar-thumb:hover{background:var(--border-2);}
 
 .hidden{display:none!important;}
+
+.milestone-type-tag {
+  font-size: .72rem;
+  color: var(--text-3);
+  margin-top: var(--sp-2);
+  letter-spacing: .03em;
+}
