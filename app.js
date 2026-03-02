@@ -1,20 +1,15 @@
 /**
- * MOMENTUM — Habit Tracker
- * app.js — Main application module
+ * MOMENTUM — Habit Tracker v3
+ * app.js — Full application module
  */
 
 /* ═══════════════════════════════════════════════════════════
-   STORAGE MODULE
+   STORAGE
 ═══════════════════════════════════════════════════════════ */
 const Storage = (() => {
   const KEY = 'momentum_habits_v2';
-  const load = () => {
-    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
-    catch { return []; }
-  };
-  const save = (data) => {
-    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {}
-  };
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+  const save = (data) => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {} };
   return { load, save };
 })();
 
@@ -23,196 +18,128 @@ const Storage = (() => {
 ═══════════════════════════════════════════════════════════ */
 const DateUtils = (() => {
   const today = () => new Date().toISOString().split('T')[0];
-
-  const yesterday = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
+  const yesterday = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; };
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; };
+  const daysBetween = (a, b) => Math.floor((new Date(b) - new Date(a)) / 86400000);
+  const formatShort = (s) => new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const formatFull  = () => new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const startOfWeek = (offsetWeeks=0) => {
+    const d = new Date(); d.setDate(d.getDate() - d.getDay() - offsetWeeks*7);
     return d.toISOString().split('T')[0];
   };
-
-  const daysAgo = (n) => {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
+  const endOfWeek = (offsetWeeks=0) => {
+    const d = new Date(); d.setDate(d.getDate() - d.getDay() + 6 - offsetWeeks*7);
     return d.toISOString().split('T')[0];
   };
-
-  const daysBetween = (a, b) => {
-    const ms = new Date(b) - new Date(a);
-    return Math.floor(ms / 86400000);
-  };
-
-  const formatDisplay = (dateStr) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  const formatShort = (dateStr) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const formatFull = () => {
-    return new Date().toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-    });
-  };
-
-  const startOfWeek = () => {
-    const d = new Date();
-    const day = d.getDay();
-    d.setDate(d.getDate() - day);
-    return d.toISOString().split('T')[0];
-  };
-
-  const startOfMonth = () => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split('T')[0];
-  };
-
-  return { today, yesterday, daysAgo, daysBetween, formatDisplay, formatShort, formatFull, startOfWeek, startOfMonth };
+  return { today, yesterday, daysAgo, daysBetween, formatShort, formatFull, startOfWeek, endOfWeek };
 })();
 
 /* ═══════════════════════════════════════════════════════════
-   HABIT LOGIC MODULE
+   HABIT LOGIC
 ═══════════════════════════════════════════════════════════ */
 const HabitLogic = (() => {
-
-  const getCompletionForDate = (habit, date) =>
-    habit.completions.find(c => c.date === date) || null;
-
-  const getTodayCount = (habit) => {
-    const rec = getCompletionForDate(habit, DateUtils.today());
-    return rec ? rec.count : 0;
-  };
-
-  const isDailyDoneToday = (habit) => {
-    if (habit.type !== 'daily') return false;
-    return getTodayCount(habit) >= 1;
-  };
+  const getComp = (habit, date) => habit.completions.find(c => c.date === date) || null;
+  const getTodayCount   = (habit) => { const r = getComp(habit, DateUtils.today()); return r ? r.count : 0; };
+  const isDailyDoneToday = (habit) => habit.type === 'daily' && getTodayCount(habit) >= 1;
 
   const complete = (habit) => {
-    const t = DateUtils.today();
-    const existing = getCompletionForDate(habit, t);
-    if (habit.type === 'daily' && existing) return habit; // already done
-    if (existing) {
-      existing.count += 1;
-    } else {
-      habit.completions.push({ date: t, count: 1 });
-    }
-    recalcStreaks(habit);
-    return habit;
+    const t = DateUtils.today(), ex = getComp(habit, t);
+    if (habit.type === 'daily' && ex && ex.count >= 1) return habit;
+    if (ex) ex.count += 1;
+    else habit.completions.push({ date: t, count: 1 });
+    recalcStreaks(habit); return habit;
+  };
+
+  const undo = (habit) => {
+    const t = DateUtils.today(), ex = getComp(habit, t);
+    if (!ex || ex.count <= 0) return habit;
+    ex.count -= 1;
+    if (ex.count === 0) habit.completions = habit.completions.filter(c => c.date !== t);
+    recalcStreaks(habit); return habit;
   };
 
   const recalcStreaks = (habit) => {
-    // Build a Set of active dates (dates with at least 1 completion)
-    const activeDates = new Set(habit.completions.filter(c => c.count > 0).map(c => c.date));
-    if (activeDates.size === 0) {
-      habit.currentStreak = 0;
-      habit.longestStreak = 0;
-      return;
-    }
-
-    const sorted = [...activeDates].sort();
+    const active = new Set(habit.completions.filter(c => c.count > 0).map(c => c.date));
+    if (!active.size) { habit.currentStreak = 0; habit.longestStreak = 0; return; }
+    const sorted = [...active].sort();
     let longest = 1, cur = 1;
-
     for (let i = 1; i < sorted.length; i++) {
-      const diff = DateUtils.daysBetween(sorted[i - 1], sorted[i]);
-      if (diff === 1) { cur++; if (cur > longest) longest = cur; }
-      else { cur = 1; }
+      DateUtils.daysBetween(sorted[i-1], sorted[i]) === 1 ? (cur++, longest = Math.max(longest, cur)) : (cur = 1);
     }
     habit.longestStreak = longest;
-
-    // Current streak: count backwards from today
-    const t = DateUtils.today();
-    let streak = 0;
-    let checkDate = t;
-    // If today has no completion, check from yesterday
-    if (!activeDates.has(t)) {
-      checkDate = DateUtils.yesterday();
-    }
-    while (activeDates.has(checkDate)) {
+    let streak = 0, check = active.has(DateUtils.today()) ? DateUtils.today() : DateUtils.yesterday();
+    while (active.has(check)) {
       streak++;
-      const d = new Date(checkDate + 'T00:00:00');
-      d.setDate(d.getDate() - 1);
-      checkDate = d.toISOString().split('T')[0];
+      const d = new Date(check+'T00:00:00'); d.setDate(d.getDate()-1);
+      check = d.toISOString().split('T')[0];
     }
     habit.currentStreak = streak;
   };
 
+  // Global metrics
+  const getAuraIntensity   = (habits) => habits.reduce((s, h) => s + h.currentStreak, 0);
+  const getDailyAlignment  = (habits) => {
+    if (!habits.length) return 0;
+    const done = habits.filter(h => h.completions.some(c => c.date === DateUtils.today() && c.count > 0)).length;
+    return Math.round((done / habits.length) * 100);
+  };
+  const getDisciplineDepth = (habits) => {
+    const all = new Set();
+    habits.forEach(h => h.completions.forEach(c => { if (c.count > 0) all.add(c.date); }));
+    return all.size;
+  };
+
+  // Per-habit stats
   const computeStats = (habit) => {
     const totalDays = DateUtils.daysBetween(habit.createdAt, DateUtils.today()) + 1;
-    const activeDates = new Set(habit.completions.filter(c => c.count > 0).map(c => c.date));
-    const totalCompletions = habit.completions.reduce((s, c) => s + c.count, 0);
+    const active    = new Set(habit.completions.filter(c => c.count > 0).map(c => c.date));
+    const total     = habit.completions.reduce((s, c) => s + c.count, 0);
+    const compRate  = Math.min((total / Math.max(habit.goal, 1)) * 100, 100);
+    const consist   = (active.size / Math.max(totalDays, 1)) * 100;
+    const sratio    = habit.longestStreak > 0 ? habit.currentStreak / habit.longestStreak : 0;
+    const hsi       = Math.min((compRate*0.4) + (consist*0.3) + (sratio*100*0.3), 100);
 
-    const completionRate = Math.min((totalCompletions / Math.max(habit.goal, 1)) * 100, 100);
-    const consistency = (activeDates.size / Math.max(totalDays, 1)) * 100;
-    const streakRatio = habit.longestStreak > 0 ? habit.currentStreak / habit.longestStreak : 0;
-    const hsi = Math.min(
-      (completionRate * 0.4) + (consistency * 0.3) + (streakRatio * 100 * 0.3),
-      100
-    );
+    const tw  = DateUtils.startOfWeek(0), lws = DateUtils.startOfWeek(1), lwe = DateUtils.endOfWeek(1);
+    const thisWeek = habit.completions.filter(c => c.date >= tw).reduce((s,c)=>s+c.count,0);
+    const lastWeek = habit.completions.filter(c => c.date >= lws && c.date <= lwe).reduce((s,c)=>s+c.count,0);
+    const velocityPct = lastWeek === 0 ? (thisWeek > 0 ? 100 : 0) : Math.round(((thisWeek-lastWeek)/lastWeek)*100);
 
-    // This week
-    const weekStart = DateUtils.startOfWeek();
-    const thisWeek = habit.completions
-      .filter(c => c.date >= weekStart)
-      .reduce((s, c) => s + c.count, 0);
-
-    // This month
-    const monthStart = DateUtils.startOfMonth();
-    const thisMonth = habit.completions
-      .filter(c => c.date >= monthStart)
-      .reduce((s, c) => s + c.count, 0);
+    const milestones   = [5,10,25,50,100,250,500,1000];
+    const nextMS       = milestones.find(m => m > total) || total + 100;
+    const prevMS       = milestones.filter(m => m <= total).pop() || 0;
+    const msPct        = nextMS === prevMS ? 100 : Math.round(((total-prevMS)/(nextMS-prevMS))*100);
 
     return {
-      totalCompletions,
-      activeDays: activeDates.size,
-      totalDays,
-      completionRate: Math.round(completionRate * 10) / 10,
-      consistency: Math.round(consistency * 10) / 10,
-      currentStreak: habit.currentStreak,
-      longestStreak: habit.longestStreak,
-      thisWeek,
-      thisMonth,
-      hsi: Math.round(hsi * 10) / 10,
-      streakRatio
+      totalCompletions: total, activeDays: active.size, totalDays,
+      completionRate: Math.round(compRate*10)/10,
+      consistency: Math.round(consist*10)/10,
+      currentStreak: habit.currentStreak, longestStreak: habit.longestStreak,
+      hsi: Math.round(hsi*10)/10,
+      thisWeek, lastWeek, velocityPct,
+      nextMilestone: nextMS, prevMilestone: prevMS, milestoneProgress: msPct,
     };
   };
 
-  const getLast14Days = (habit) => {
-    return Array.from({ length: 14 }, (_, i) => {
-      const date = DateUtils.daysAgo(13 - i);
-      const rec = getCompletionForDate(habit, date);
-      return { date, count: rec ? rec.count : 0 };
-    });
+  // Chart data
+  const getLast14Days = (habit) => Array.from({length:14},(_,i) => {
+    const date = DateUtils.daysAgo(13-i), rec = getComp(habit,date);
+    return { date, count: rec ? rec.count : 0 };
+  });
+  const getLast30Days = (habit) => Array.from({length:30},(_,i) => {
+    const date = DateUtils.daysAgo(29-i), rec = getComp(habit,date);
+    return { date, count: rec ? rec.count : 0 };
+  });
+  const getAllTimeTrend = (habit) => {
+    if (!habit.completions.length) return [];
+    const sorted = [...habit.completions].sort((a,b)=>a.date.localeCompare(b.date));
+    let run = 0;
+    return sorted.map(c => { run += c.count; return { date: c.date, total: run }; });
   };
-
-  const getWeeklyFreq = (habit) => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const counts = new Array(7).fill(0);
-    habit.completions.forEach(c => {
-      const d = new Date(c.date + 'T00:00:00');
-      counts[d.getDay()] += c.count;
-    });
-    return days.map((d, i) => ({ day: d, count: counts[i] }));
-  };
-
-  const getTotalCompletions = (habits) =>
-    habits.reduce((s, h) => s + h.completions.reduce((a, c) => a + c.count, 0), 0);
-
-  const getDoneToday = (habits) =>
-    habits.filter(h => {
-      const t = DateUtils.today();
-      return h.completions.some(c => c.date === t && c.count > 0);
-    }).length;
-
-  const getBestStreak = (habits) =>
-    habits.reduce((best, h) => Math.max(best, h.currentStreak), 0);
 
   return {
-    complete, recalcStreaks, computeStats, isDailyDoneToday, getTodayCount,
-    getLast14Days, getWeeklyFreq, getTotalCompletions, getDoneToday, getBestStreak
+    complete, undo, recalcStreaks, isDailyDoneToday, getTodayCount,
+    getAuraIntensity, getDailyAlignment, getDisciplineDepth,
+    computeStats, getLast14Days, getLast30Days, getAllTimeTrend,
   };
 })();
 
@@ -222,89 +149,65 @@ const HabitLogic = (() => {
 const state = {
   habits: Storage.load(),
   currentView: 'habits',
-  editingId: null,
-  deletingId: null,
-  selectedHabitId: null,
-  barChart: null,
-  lineChart: null,
-  weekChart: null,
+  editingId: null, deletingId: null, selectedHabitId: null,
+  charts: {},
 };
 
 /* ═══════════════════════════════════════════════════════════
    UI HELPERS
 ═══════════════════════════════════════════════════════════ */
 const $ = (id) => document.getElementById(id);
-const qs = (sel, el = document) => el.querySelector(sel);
-
-const showModal = (id) => {
-  $(id).hidden = false;
-  $('modalBackdrop').hidden = false;
-};
-
-const hideModal = (id) => {
-  $(id).hidden = true;
-  $('modalBackdrop').hidden = true;
-};
-
-const hideAllModals = () => {
-  ['habitModal', 'deleteModal'].forEach(id => $(id).hidden = true);
-  $('modalBackdrop').hidden = true;
-};
+const esc = (s) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const showModal = (id) => { $(id).hidden = false; $('modalBackdrop').hidden = false; };
+const hideModal = (id) => { $(id).hidden = true;  $('modalBackdrop').hidden = true; };
+const hideAllModals = () => { ['habitModal','deleteModal'].forEach(id=>$(id).hidden=true); $('modalBackdrop').hidden=true; };
 
 /* ═══════════════════════════════════════════════════════════
    RENDER: HABIT CARD
 ═══════════════════════════════════════════════════════════ */
 const renderHabitCard = (habit) => {
-  const todayCount = HabitLogic.getTodayCount(habit);
-  const totalDone = habit.completions.reduce((s, c) => s + c.count, 0);
-  const pct = Math.min(Math.round((totalDone / Math.max(habit.goal, 1)) * 100), 100);
-  const isDaily = habit.type === 'daily';
-  const doneTodayFlag = isDaily ? HabitLogic.isDailyDoneToday(habit) : false;
-  const cardClass = (isDaily && doneTodayFlag) || (!isDaily && todayCount > 0)
-    ? 'habit-card completed-today' : 'habit-card';
+  const todayCount    = HabitLogic.getTodayCount(habit);
+  const totalDone     = habit.completions.reduce((s,c)=>s+c.count,0);
+  const pct           = Math.min(Math.round((totalDone / Math.max(habit.goal,1))*100),100);
+  const isDaily       = habit.type === 'daily';
+  const doneTodayFlag = HabitLogic.isDailyDoneToday(habit);
+  const hasToday      = todayCount > 0;
+
+  // Weekly dots: last 7 days
+  const dots = Array.from({length:7},(_,i) => {
+    const date = DateUtils.daysAgo(6-i);
+    const rec  = habit.completions.find(c => c.date === date);
+    return `<span class="week-dot${rec && rec.count > 0 ? ' week-dot--on' : ''}" title="${date}"></span>`;
+  }).join('');
 
   const card = document.createElement('article');
-  card.className = cardClass;
+  card.className = `habit-card${hasToday ? ' completed-today' : ''}`;
   card.dataset.id = habit.id;
-
   card.innerHTML = `
     <div class="habit-main">
       <div class="habit-top">
         <span class="habit-type-badge">${habit.type}</span>
-        <span class="habit-name">${escapeHtml(habit.name)}</span>
+        <span class="habit-name">${esc(habit.name)}</span>
       </div>
+      <div class="habit-week-dots">${dots}</div>
       <div class="habit-meta">
-        <span class="habit-stat">
-          <span>🔥</span>
-          <strong>${habit.currentStreak}</strong>
-          <span>streak</span>
-        </span>
-        <span class="habit-stat">
-          <span>↑</span>
-          <strong>${habit.longestStreak}</strong>
-          <span>best</span>
-        </span>
-        <span class="habit-stat">
-          <span>✓</span>
-          <strong>${totalDone}</strong>
-          <span>/ ${habit.goal}</span>
-        </span>
+        <span class="habit-stat">🔥 <strong>${habit.currentStreak}</strong> streak</span>
+        <span class="habit-stat">↑ <strong>${habit.longestStreak}</strong> best</span>
+        <span class="habit-stat">✓ <strong>${totalDone}</strong> / ${habit.goal}</span>
       </div>
       <div class="progress-wrap">
         <div class="progress-bar">
-          <div class="progress-fill${pct >= 100 ? ' full' : ''}" style="width:${pct}%"></div>
+          <div class="progress-fill${pct>=100?' full':''}" style="width:${pct}%"></div>
         </div>
         <span class="progress-pct">${pct}%</span>
       </div>
     </div>
     <div class="habit-actions">
-      <button
-        class="complete-btn${(isDaily && doneTodayFlag) ? ' done' : ''}"
-        data-id="${habit.id}"
-        aria-label="Complete habit"
-        ${isDaily && doneTodayFlag ? 'disabled' : ''}
-      >${(isDaily && doneTodayFlag) ? '✓' : '+'}</button>
-      <span class="count-badge">${isDaily ? (doneTodayFlag ? 'Done' : 'Today') : `×${todayCount}`}</span>
+      <div class="counter-row">
+        <button class="counter-btn undo-btn" data-id="${habit.id}" aria-label="Undo"${!hasToday?' disabled':''}>−</button>
+        <span class="counter-val">${isDaily ? (doneTodayFlag?'✓':'○') : '×'+todayCount}</span>
+        <button class="counter-btn complete-btn" data-id="${habit.id}" aria-label="Complete"${isDaily&&doneTodayFlag?' disabled':''}>+</button>
+      </div>
       <div class="icon-actions">
         <button class="icon-btn edit-btn" data-id="${habit.id}" title="Edit">✎</button>
         <button class="icon-btn delete icon-btn-delete" data-id="${habit.id}" title="Delete">⌫</button>
@@ -318,264 +221,263 @@ const renderHabitCard = (habit) => {
    RENDER: HABITS VIEW
 ═══════════════════════════════════════════════════════════ */
 const renderHabitsView = () => {
-  const list = $('habitsList');
-  const empty = $('emptyState');
-
-  // Summary strip
   const strip = $('summaryStrip');
-  const total = state.habits.length;
-  const doneToday = HabitLogic.getDoneToday(state.habits);
-  const bestStreak = HabitLogic.getBestStreak(state.habits);
-  const totalComp = HabitLogic.getTotalCompletions(state.habits);
+  const aura  = HabitLogic.getAuraIntensity(state.habits);
+  const align = HabitLogic.getDailyAlignment(state.habits);
+  const depth = HabitLogic.getDisciplineDepth(state.habits);
 
   strip.innerHTML = `
     <div class="summary-card">
-      <div class="summary-label">Active Habits</div>
-      <div class="summary-value">${total}</div>
-      <div class="summary-sub">${doneToday} completed today</div>
+      <div class="summary-label">⚡ Aura Intensity</div>
+      <div class="summary-value">${aura}</div>
+      <div class="summary-sub">Sum of all active streaks</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">Best Streak</div>
-      <div class="summary-value">${bestStreak}</div>
-      <div class="summary-sub">days running</div>
+      <div class="summary-label">◎ Daily Alignment</div>
+      <div class="summary-value">${align}<span style="font-size:1.1rem;font-weight:500">%</span></div>
+      <div class="summary-sub">Habits completed today</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">Total Completions</div>
-      <div class="summary-value">${totalComp}</div>
-      <div class="summary-sub">all time</div>
+      <div class="summary-label">◈ Discipline Depth</div>
+      <div class="summary-value">${depth}</div>
+      <div class="summary-sub">Total active days ever</div>
     </div>
   `;
 
+  const list = $('habitsList');
   list.innerHTML = '';
-
   if (state.habits.length === 0) {
-    empty.hidden = false;
-    strip.hidden = true;
+    $('emptyState').hidden = false; strip.hidden = true;
   } else {
-    empty.hidden = true;
-    strip.hidden = false;
+    $('emptyState').hidden = true; strip.hidden = false;
     state.habits.forEach(h => list.appendChild(renderHabitCard(h)));
   }
 };
 
 /* ═══════════════════════════════════════════════════════════
-   RENDER: DASHBOARD VIEW
+   RENDER: DASHBOARD
 ═══════════════════════════════════════════════════════════ */
 const renderDashboard = () => {
   const sel = $('dashboardSelect');
-  const content = $('dashboardContent');
-  const dashEmpty = $('dashboardEmpty');
-
   sel.innerHTML = '';
-
-  if (state.habits.length === 0) {
+  if (!state.habits.length) {
     $('dashboardSelectWrap').hidden = true;
-    content.hidden = true;
-    dashEmpty.hidden = false;
+    $('dashboardContent').hidden = true;
+    $('dashboardEmpty').hidden = false;
     return;
   }
-
-  dashEmpty.hidden = true;
+  $('dashboardEmpty').hidden = true;
   $('dashboardSelectWrap').hidden = false;
-
   state.habits.forEach(h => {
-    const opt = document.createElement('option');
-    opt.value = h.id;
-    opt.textContent = h.name;
-    sel.appendChild(opt);
+    const o = document.createElement('option');
+    o.value = h.id; o.textContent = h.name; sel.appendChild(o);
   });
-
-  // If we have a previously selected habit, keep it; else default to first
-  if (state.selectedHabitId) {
-    sel.value = state.selectedHabitId;
-  } else {
-    state.selectedHabitId = state.habits[0].id;
-    sel.value = state.selectedHabitId;
-  }
-
+  if (state.selectedHabitId) sel.value = state.selectedHabitId;
+  else { state.selectedHabitId = state.habits[0].id; sel.value = state.selectedHabitId; }
   renderDashboardStats();
 };
+
+const milestoneBadge = (n) => n<=10?'🌱':n<=25?'⭐':n<=50?'🔥':n<=100?'💎':n<=250?'🏆':n<=500?'👑':'🌟';
 
 const renderDashboardStats = () => {
   const habit = state.habits.find(h => h.id === state.selectedHabitId);
   if (!habit) return;
+  $('dashboardContent').hidden = false;
+  const s = HabitLogic.computeStats(habit);
 
-  const stats = HabitLogic.computeStats(habit);
-  const content = $('dashboardContent');
-  content.hidden = false;
+  $('statsGrid').innerHTML = `
+    <!-- MILESTONE -->
+    <div class="stat-card stat-card--milestone">
+      <div class="milestone-header">
+        <div>
+          <div class="milestone-title">🏆 Milestone Tracker</div>
+          <div class="milestone-sub">
+            <strong>${s.totalCompletions}</strong> logs ·
+            <span class="milestone-next">${s.nextMilestone - s.totalCompletions} away from
+              <strong>${s.nextMilestone}</strong> ${milestoneBadge(s.nextMilestone)}
+            </span>
+          </div>
+        </div>
+        <div class="milestone-badge-icon">${milestoneBadge(s.nextMilestone)}</div>
+      </div>
+      <div class="milestone-bar-wrap">
+        <div class="milestone-bar">
+          <div class="milestone-fill" style="width:${s.milestoneProgress}%"></div>
+        </div>
+        <span class="milestone-pct">${s.milestoneProgress}%</span>
+      </div>
+      <div class="milestone-labels">
+        <span>${s.prevMilestone}</span>
+        <span>${s.nextMilestone}</span>
+      </div>
+    </div>
 
-  const grid = $('statsGrid');
-  grid.innerHTML = `
+    <!-- STRENGTH INDEX -->
     <div class="stat-card">
       <div class="stat-card__accent stat-card__accent--purple">◈</div>
-      <div class="stat-card__value">${stats.completionRate}%</div>
-      <div class="stat-card__label">Completion Rate</div>
-      <div class="stat-card__sub">${stats.totalCompletions} of ${habit.goal} goal</div>
+      <div class="stat-card__value">${s.hsi}</div>
+      <div class="stat-card__label">Strength Index</div>
+      <div class="stat-card__sub">Consistency · Streak · Volume</div>
+      <div class="mini-bar"><div class="mini-fill mini-fill--purple" style="width:${s.hsi}%"></div></div>
     </div>
-    <div class="stat-card">
-      <div class="stat-card__accent stat-card__accent--green">◎</div>
-      <div class="stat-card__value">${stats.consistency}%</div>
-      <div class="stat-card__label">Consistency Score</div>
-      <div class="stat-card__sub">${stats.activeDays} of ${stats.totalDays} days</div>
-    </div>
+
+    <!-- CURRENT STREAK -->
     <div class="stat-card">
       <div class="stat-card__accent stat-card__accent--amber">🔥</div>
-      <div class="stat-card__value">${stats.currentStreak}</div>
+      <div class="stat-card__value">${s.currentStreak}</div>
       <div class="stat-card__label">Current Streak</div>
-      <div class="stat-card__sub">days in a row</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-card__accent stat-card__accent--blue">↑</div>
-      <div class="stat-card__value">${stats.longestStreak}</div>
-      <div class="stat-card__label">Longest Streak</div>
-      <div class="stat-card__sub">personal best</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-card__accent stat-card__accent--pink">◉</div>
-      <div class="stat-card__value">${stats.thisWeek}</div>
-      <div class="stat-card__label">This Week</div>
-      <div class="stat-card__sub">${stats.thisMonth} this month</div>
-    </div>
-    <div class="stat-card stat-card--hsi">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div>
-          <div class="stat-card__value">${stats.hsi}</div>
-          <div class="stat-card__label">Habit Strength Index</div>
-          <div class="stat-card__sub">Completion × 0.4 + Consistency × 0.3 + Streak Ratio × 0.3</div>
+      <div class="stat-card__sub">Best ever: ${s.longestStreak} days</div>
+      <div class="mini-bar">
+        <div class="mini-fill mini-fill--amber"
+          style="width:${s.longestStreak>0?Math.round((s.currentStreak/s.longestStreak)*100):0}%">
         </div>
-        <div style="font-size:2rem;opacity:0.6">${hsiEmoji(stats.hsi)}</div>
       </div>
-      <div class="hsi-bar"><div class="hsi-fill" style="width:${stats.hsi}%"></div></div>
+    </div>
+
+    <!-- VELOCITY -->
+    <div class="stat-card">
+      <div class="stat-card__accent ${s.velocityPct>=0?'stat-card__accent--green':'stat-card__accent--red'}">
+        ${s.velocityPct>=0?'↑':'↓'}
+      </div>
+      <div class="stat-card__value velocity-val ${s.velocityPct>=0?'pos':'neg'}">
+        ${s.velocityPct>=0?'+':''}${s.velocityPct}%
+      </div>
+      <div class="stat-card__label">Velocity</div>
+      <div class="stat-card__sub">This week <strong>${s.thisWeek}</strong> vs last <strong>${s.lastWeek}</strong></div>
     </div>
   `;
 
-  renderCharts(habit, stats);
-};
-
-const hsiEmoji = (score) => {
-  if (score >= 80) return '🏆';
-  if (score >= 60) return '💪';
-  if (score >= 40) return '📈';
-  if (score >= 20) return '🌱';
-  return '🐣';
+  renderCharts(habit, s);
 };
 
 /* ═══════════════════════════════════════════════════════════
    CHARTS
 ═══════════════════════════════════════════════════════════ */
-const CHART_DEFAULTS = {
-  color: {
-    accent: '#7c6bff',
-    accent2: '#c084fc',
-    green: '#34d399',
-    grid: 'rgba(255,255,255,0.05)',
-    text: '#6b6890',
-  }
+const C = {
+  accent:'#7c6bff', accent2:'#c084fc', green:'#34d399',
+  amber:'#fbbf24',  red:'#f87171',     blue:'#60a5fa',
+  grid:'rgba(255,255,255,0.05)', text:'#6b6890',
 };
 
 const destroyCharts = () => {
-  if (state.barChart)  { state.barChart.destroy();  state.barChart = null; }
-  if (state.lineChart) { state.lineChart.destroy(); state.lineChart = null; }
-  if (state.weekChart) { state.weekChart.destroy(); state.weekChart = null; }
+  Object.values(state.charts).forEach(c => { try { c.destroy(); } catch {} });
+  state.charts = {};
 };
 
-const chartDefaults = () => ({
-  plugins: { legend: { display: false } },
-  scales: {
-    x: {
-      grid: { color: CHART_DEFAULTS.color.grid },
-      ticks: { color: CHART_DEFAULTS.color.text, font: { family: 'DM Sans', size: 11 } }
-    },
-    y: {
-      grid: { color: CHART_DEFAULTS.color.grid },
-      ticks: { color: CHART_DEFAULTS.color.text, font: { family: 'DM Sans', size: 11 } },
-      beginAtZero: true
-    }
-  }
+const baseScales = () => ({
+  x: { grid:{color:C.grid}, ticks:{color:C.text, font:{family:'DM Sans',size:11}} },
+  y: { grid:{color:C.grid}, ticks:{color:C.text, font:{family:'DM Sans',size:11}}, beginAtZero:true },
 });
 
-const renderCharts = (habit, stats) => {
+const renderCharts = (habit) => {
   destroyCharts();
+  const last14  = HabitLogic.getLast14Days(habit);
+  const last30  = HabitLogic.getLast30Days(habit);
+  const allTime = HabitLogic.getAllTimeTrend(habit);
 
-  const last14 = HabitLogic.getLast14Days(habit);
-  const weekFreq = HabitLogic.getWeeklyFreq(habit);
+  renderHeatmap(last30);
 
-  // Bar chart — last 14 days
-  const barCtx = $('barChart').getContext('2d');
-  const barGrad = barCtx.createLinearGradient(0, 0, 0, 200);
-  barGrad.addColorStop(0, 'rgba(124,107,255,0.9)');
-  barGrad.addColorStop(1, 'rgba(192,132,252,0.3)');
-
-  state.barChart = new Chart(barCtx, {
-    type: 'bar',
-    data: {
-      labels: last14.map(d => DateUtils.formatShort(d.date)),
-      datasets: [{
-        data: last14.map(d => d.count),
-        backgroundColor: barGrad,
-        borderRadius: 6,
-        borderSkipped: false,
-      }]
-    },
-    options: {
-      ...chartDefaults(),
-      responsive: true,
-      animation: { duration: 600, easing: 'easeOutQuart' },
-    }
-  });
-
-  // Line chart — trend (running total last 14 days)
-  const lineCtx = $('lineChart').getContext('2d');
-  const lineGrad = lineCtx.createLinearGradient(0, 0, 0, 200);
-  lineGrad.addColorStop(0, 'rgba(52,211,153,0.3)');
-  lineGrad.addColorStop(1, 'rgba(52,211,153,0)');
-
-  let running = 0;
-  const trendData = last14.map(d => { running += d.count; return running; });
-
-  state.lineChart = new Chart(lineCtx, {
+  /* ── SUCCESS RATE (line) ── */
+  const srCtx = $('successRateChart').getContext('2d');
+  const srGrad = srCtx.createLinearGradient(0,0,0,180);
+  srGrad.addColorStop(0,'rgba(124,107,255,0.3)'); srGrad.addColorStop(1,'rgba(124,107,255,0)');
+  const srData = last14.map(d => d.count > 0 ? 100 : 0);
+  state.charts.sr = new Chart(srCtx, {
     type: 'line',
     data: {
       labels: last14.map(d => DateUtils.formatShort(d.date)),
       datasets: [{
-        data: trendData,
-        borderColor: CHART_DEFAULTS.color.green,
-        backgroundColor: lineGrad,
-        borderWidth: 2.5,
-        pointRadius: 3,
-        pointBackgroundColor: CHART_DEFAULTS.color.green,
-        tension: 0.4,
-        fill: true,
+        data: srData, borderColor: C.accent, backgroundColor: srGrad,
+        borderWidth: 2.5, tension: 0.35, fill: true,
+        pointRadius: 4,
+        pointBackgroundColor: srData.map(v => v===100 ? C.green : 'rgba(248,113,113,0.7)'),
       }]
     },
     options: {
-      ...chartDefaults(),
-      responsive: true,
-      animation: { duration: 800, easing: 'easeOutQuart' },
+      responsive: true, plugins:{legend:{display:false}},
+      scales: { ...baseScales(), y:{ ...baseScales().y, max:100, ticks:{...baseScales().y.ticks, callback:v=>v+'%'} } },
+      animation:{duration:600}
     }
   });
 
-  // Week frequency bar chart
-  const weekCtx = $('weekChart').getContext('2d');
-  const weekGrad = weekCtx.createLinearGradient(0, 0, 0, 200);
-  weekGrad.addColorStop(0, 'rgba(192,132,252,0.9)');
-  weekGrad.addColorStop(1, 'rgba(96,165,250,0.4)');
-
-  state.weekChart = new Chart(weekCtx, {
+  /* ── WEEKLY COMPARISON (grouped bar) ── */
+  const buildWeekDays = (offset) => Array.from({length:7},(_,i) => {
+    const base = new Date(DateUtils.startOfWeek(offset)+'T00:00:00');
+    base.setDate(base.getDate()+i);
+    const ds = base.toISOString().split('T')[0];
+    const rec = habit.completions.find(c=>c.date===ds);
+    return rec ? rec.count : 0;
+  });
+  const wkCtx = $('weekCompChart').getContext('2d');
+  state.charts.wk = new Chart(wkCtx, {
     type: 'bar',
     data: {
-      labels: weekFreq.map(d => d.day),
-      datasets: [{
-        data: weekFreq.map(d => d.count),
-        backgroundColor: weekGrad,
-        borderRadius: 8,
-        borderSkipped: false,
-      }]
+      labels: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+      datasets: [
+        { label:'This week', data:buildWeekDays(0), backgroundColor:'rgba(124,107,255,0.75)', borderRadius:5, borderSkipped:false },
+        { label:'Last week',  data:buildWeekDays(1), backgroundColor:'rgba(96,165,250,0.4)',   borderRadius:5, borderSkipped:false },
+      ]
     },
     options: {
-      ...chartDefaults(),
       responsive: true,
-      animation: { duration: 700, easing: 'easeOutQuart' },
+      plugins:{ legend:{ display:true, labels:{color:C.text,font:{family:'DM Sans',size:11},boxWidth:12} } },
+      scales: baseScales(), animation:{duration:700}
+    }
+  });
+
+  /* ── ALL-TIME TREND (line) ── */
+  const atCtx = $('allTimeTrendChart').getContext('2d');
+  const atGrad = atCtx.createLinearGradient(0,0,0,200);
+  atGrad.addColorStop(0,'rgba(52,211,153,0.35)'); atGrad.addColorStop(1,'rgba(52,211,153,0)');
+  const atLabels = allTime.map(d => DateUtils.formatShort(d.date));
+  const atData   = allTime.map(d => d.total);
+  state.charts.at = new Chart(atCtx, {
+    type: 'line',
+    data: {
+      labels: atLabels.length ? atLabels : ['–'],
+      datasets: [{
+        data: atData.length ? atData : [0],
+        borderColor: C.green, backgroundColor: atGrad,
+        borderWidth: 2.5, tension: 0.4, fill: true,
+        pointRadius: atData.length > 30 ? 0 : 3,
+        pointBackgroundColor: C.green,
+      }]
+    },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:baseScales(), animation:{duration:800} }
+  });
+};
+
+/* ── HEATMAP (vanilla canvas) ─────────────────────────── */
+const renderHeatmap = (last30) => {
+  const canvas = $('heatmapCanvas');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const COLS = 10, ROWS = 3;
+  const containerW = canvas.parentElement.clientWidth - 32;
+  const cell = Math.floor((containerW - (COLS-1)*4) / COLS);
+  const gap  = 4;
+  const W = COLS*(cell+gap)-gap, H = ROWS*(cell+gap)-gap;
+
+  canvas.width  = W*dpr; canvas.height = H*dpr;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const maxCount = Math.max(...last30.map(d=>d.count), 1);
+
+  last30.forEach((d,i) => {
+    const col = i%COLS, row = Math.floor(i/COLS);
+    const x = col*(cell+gap), y = row*(cell+gap);
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.beginPath(); ctx.roundRect(x,y,cell,cell,4); ctx.fill();
+    if (d.count > 0) {
+      const intensity = d.count/maxCount;
+      ctx.fillStyle = `rgba(124,107,255,${0.2+intensity*0.8})`;
+      ctx.beginPath(); ctx.roundRect(x,y,cell,cell,4); ctx.fill();
+      if (intensity > 0.5) {
+        ctx.fillStyle = `rgba(192,132,252,${intensity*0.5})`;
+        ctx.beginPath(); ctx.roundRect(x+2,y+2,cell-4,cell-4,3); ctx.fill();
+      }
     }
   });
 };
@@ -585,218 +487,125 @@ const renderCharts = (habit, stats) => {
 ═══════════════════════════════════════════════════════════ */
 const switchView = (view) => {
   state.currentView = view;
-
-  $('habitsView').classList.toggle('hidden', view !== 'habits');
-  $('dashboardView').classList.toggle('hidden', view !== 'dashboard');
-
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === view);
-  });
-
-  $('topbarTitle').textContent = view === 'habits' ? "Today's Habits" : 'Dashboard';
+  $('habitsView').classList.toggle('hidden', view!=='habits');
+  $('dashboardView').classList.toggle('hidden', view!=='dashboard');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view===view));
+  $('topbarTitle').textContent = view==='habits' ? "Today's Habits" : 'Dashboard';
   $('addHabitBtn').hidden = view !== 'habits';
-
-  if (view === 'dashboard') renderDashboard();
-
-  // Close sidebar on mobile
+  if (view==='dashboard') renderDashboard();
   closeSidebar();
 };
 
 /* ═══════════════════════════════════════════════════════════
-   SIDEBAR (MOBILE)
+   SIDEBAR
 ═══════════════════════════════════════════════════════════ */
 let overlay = null;
-
-const openSidebar = () => {
+const openSidebar  = () => {
   $('sidebar').classList.add('open');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'sidebar-overlay';
-    document.body.appendChild(overlay);
-    overlay.addEventListener('click', closeSidebar);
-  }
+  if (!overlay) { overlay = document.createElement('div'); overlay.className='sidebar-overlay'; document.body.appendChild(overlay); overlay.addEventListener('click',closeSidebar); }
   overlay.classList.add('active');
 };
-
-const closeSidebar = () => {
-  $('sidebar').classList.remove('open');
-  if (overlay) overlay.classList.remove('active');
-};
+const closeSidebar = () => { $('sidebar').classList.remove('open'); if(overlay) overlay.classList.remove('active'); };
 
 /* ═══════════════════════════════════════════════════════════
    HABIT MODAL
 ═══════════════════════════════════════════════════════════ */
 let selectedType = 'daily';
-
 const openAddModal = () => {
-  state.editingId = null;
-  selectedType = 'daily';
-  $('modalTitle').textContent = 'New Habit';
-  $('modalSave').textContent = 'Create Habit';
-  $('habitName').value = '';
-  $('habitGoal').value = '';
-  setTypeActive('daily');
-  showModal('habitModal');
-  setTimeout(() => $('habitName').focus(), 50);
+  state.editingId=null; selectedType='daily';
+  $('modalTitle').textContent='New Habit'; $('modalSave').textContent='Create Habit';
+  $('habitName').value=''; $('habitGoal').value='';
+  setTypeActive('daily'); showModal('habitModal');
+  setTimeout(()=>$('habitName').focus(),50);
 };
-
 const openEditModal = (id) => {
-  const habit = state.habits.find(h => h.id === id);
-  if (!habit) return;
-  state.editingId = id;
-  selectedType = habit.type;
-  $('modalTitle').textContent = 'Edit Habit';
-  $('modalSave').textContent = 'Save Changes';
-  $('habitName').value = habit.name;
-  $('habitGoal').value = habit.goal;
-  setTypeActive(habit.type);
-  showModal('habitModal');
-  setTimeout(() => $('habitName').focus(), 50);
+  const h = state.habits.find(h=>h.id===id); if(!h) return;
+  state.editingId=id; selectedType=h.type;
+  $('modalTitle').textContent='Edit Habit'; $('modalSave').textContent='Save Changes';
+  $('habitName').value=h.name; $('habitGoal').value=h.goal;
+  setTypeActive(h.type); showModal('habitModal');
+  setTimeout(()=>$('habitName').focus(),50);
 };
-
 const setTypeActive = (type) => {
-  selectedType = type;
-  $('typeDaily').classList.toggle('active', type === 'daily');
-  $('typeFlexible').classList.toggle('active', type === 'flexible');
+  selectedType=type;
+  $('typeDaily').classList.toggle('active',type==='daily');
+  $('typeFlexible').classList.toggle('active',type==='flexible');
 };
-
 const saveHabit = () => {
-  const name = $('habitName').value.trim();
-  const goal = parseInt($('habitGoal').value, 10);
-
-  // Validation
-  let valid = true;
-  if (!name) { $('habitName').classList.add('error'); valid = false; }
-  else $('habitName').classList.remove('error');
-  if (!goal || goal < 1) { $('habitGoal').classList.add('error'); valid = false; }
-  else $('habitGoal').classList.remove('error');
-  if (!valid) return;
-
-  if (state.editingId) {
-    const habit = state.habits.find(h => h.id === state.editingId);
-    if (habit) {
-      habit.name = name;
-      habit.goal = goal;
-      habit.type = selectedType;
-    }
+  const name=($('habitName').value||'').trim(), goal=parseInt($('habitGoal').value,10);
+  let ok=true;
+  if(!name){$('habitName').classList.add('error');ok=false;}else $('habitName').classList.remove('error');
+  if(!goal||goal<1){$('habitGoal').classList.add('error');ok=false;}else $('habitGoal').classList.remove('error');
+  if(!ok) return;
+  if(state.editingId){
+    const h=state.habits.find(h=>h.id===state.editingId);
+    if(h){h.name=name;h.goal=goal;h.type=selectedType;}
   } else {
-    const habit = {
-      id: crypto.randomUUID(),
-      name,
-      goal,
-      type: selectedType,
-      createdAt: DateUtils.today(),
-      completions: [],
-      currentStreak: 0,
-      longestStreak: 0,
-    };
-    state.habits.push(habit);
+    state.habits.push({id:crypto.randomUUID(),name,goal,type:selectedType,createdAt:DateUtils.today(),completions:[],currentStreak:0,longestStreak:0});
   }
-
-  Storage.save(state.habits);
-  hideModal('habitModal');
-  renderHabitsView();
+  Storage.save(state.habits); hideModal('habitModal'); renderHabitsView();
 };
 
 /* ═══════════════════════════════════════════════════════════
    DELETE MODAL
 ═══════════════════════════════════════════════════════════ */
 const openDeleteModal = (id) => {
-  const habit = state.habits.find(h => h.id === id);
-  if (!habit) return;
-  state.deletingId = id;
-  $('deleteHabitName').textContent = habit.name;
-  showModal('deleteModal');
+  const h=state.habits.find(h=>h.id===id); if(!h) return;
+  state.deletingId=id; $('deleteHabitName').textContent=h.name; showModal('deleteModal');
 };
-
 const confirmDelete = () => {
-  state.habits = state.habits.filter(h => h.id !== state.deletingId);
-  if (state.selectedHabitId === state.deletingId) state.selectedHabitId = null;
-  Storage.save(state.habits);
-  hideModal('deleteModal');
-  renderHabitsView();
-  if (state.currentView === 'dashboard') renderDashboard();
+  state.habits=state.habits.filter(h=>h.id!==state.deletingId);
+  if(state.selectedHabitId===state.deletingId) state.selectedHabitId=null;
+  Storage.save(state.habits); hideModal('deleteModal'); renderHabitsView();
+  if(state.currentView==='dashboard') renderDashboard();
 };
 
 /* ═══════════════════════════════════════════════════════════
-   COMPLETE HABIT
+   COMPLETE / UNDO
 ═══════════════════════════════════════════════════════════ */
 const completeHabit = (id) => {
-  const habit = state.habits.find(h => h.id === id);
-  if (!habit) return;
-  HabitLogic.complete(habit);
-  Storage.save(state.habits);
-  renderHabitsView();
+  const h=state.habits.find(h=>h.id===id); if(!h) return;
+  HabitLogic.complete(h); Storage.save(state.habits); renderHabitsView();
+};
+const undoHabit = (id) => {
+  const h=state.habits.find(h=>h.id===id); if(!h) return;
+  HabitLogic.undo(h); Storage.save(state.habits); renderHabitsView();
 };
 
 /* ═══════════════════════════════════════════════════════════
-   ESCAPE HELPER
-═══════════════════════════════════════════════════════════ */
-const escapeHtml = (str) =>
-  str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-/* ═══════════════════════════════════════════════════════════
-   EVENT LISTENERS
+   EVENTS
 ═══════════════════════════════════════════════════════════ */
 const initEvents = () => {
-  // Nav
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+  document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click',()=>switchView(b.dataset.view)));
+  $('addHabitBtn').addEventListener('click',openAddModal);
+  $('emptyAddBtn').addEventListener('click',openAddModal);
+  $('menuBtn').addEventListener('click',openSidebar);
+  $('sidebarClose').addEventListener('click',closeSidebar);
+
+  $('habitsList').addEventListener('click',(e)=>{
+    const cb=e.target.closest('.complete-btn'); if(cb){completeHabit(cb.dataset.id);return;}
+    const ub=e.target.closest('.undo-btn');    if(ub){undoHabit(ub.dataset.id);return;}
+    const eb=e.target.closest('.edit-btn');    if(eb){openEditModal(eb.dataset.id);return;}
+    const db=e.target.closest('.icon-btn-delete'); if(db){openDeleteModal(db.dataset.id);return;}
   });
 
-  // Topbar add btn
-  $('addHabitBtn').addEventListener('click', openAddModal);
-  $('emptyAddBtn').addEventListener('click', openAddModal);
-
-  // Sidebar mobile
-  $('menuBtn').addEventListener('click', openSidebar);
-  $('sidebarClose').addEventListener('click', closeSidebar);
-
-  // Habit list delegation
-  $('habitsList').addEventListener('click', (e) => {
-    const completeBtn = e.target.closest('.complete-btn');
-    if (completeBtn) { completeHabit(completeBtn.dataset.id); return; }
-
-    const editBtn = e.target.closest('.edit-btn');
-    if (editBtn) { openEditModal(editBtn.dataset.id); return; }
-
-    const deleteBtn = e.target.closest('.icon-btn-delete');
-    if (deleteBtn) { openDeleteModal(deleteBtn.dataset.id); return; }
-  });
-
-  // Modal: type toggle
-  $('typeDaily').addEventListener('click', () => setTypeActive('daily'));
-  $('typeFlexible').addEventListener('click', () => setTypeActive('flexible'));
-
-  // Modal: save/cancel
-  $('modalSave').addEventListener('click', saveHabit);
-  $('modalCancel').addEventListener('click', () => hideModal('habitModal'));
-  $('modalClose').addEventListener('click', () => hideModal('habitModal'));
-
-  // Delete modal
-  $('deleteConfirmBtn').addEventListener('click', confirmDelete);
-  $('deleteCancelBtn').addEventListener('click', () => hideModal('deleteModal'));
-  $('deleteModalClose').addEventListener('click', () => hideModal('deleteModal'));
-
-  // Backdrop closes modals
-  $('modalBackdrop').addEventListener('click', hideAllModals);
-
-  // Dashboard habit select
-  $('dashboardSelect').addEventListener('change', (e) => {
-    state.selectedHabitId = e.target.value;
-    renderDashboardStats();
-  });
-
-  // Keyboard: Escape closes modals
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideAllModals();
-  });
-
-  // Enter submits habit form
-  [$('habitName'), $('habitGoal')].forEach(el => {
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') saveHabit();
-    });
+  $('typeDaily').addEventListener('click',()=>setTypeActive('daily'));
+  $('typeFlexible').addEventListener('click',()=>setTypeActive('flexible'));
+  $('modalSave').addEventListener('click',saveHabit);
+  $('modalCancel').addEventListener('click',()=>hideModal('habitModal'));
+  $('modalClose').addEventListener('click',()=>hideModal('habitModal'));
+  $('deleteConfirmBtn').addEventListener('click',confirmDelete);
+  $('deleteCancelBtn').addEventListener('click',()=>hideModal('deleteModal'));
+  $('deleteModalClose').addEventListener('click',()=>hideModal('deleteModal'));
+  $('modalBackdrop').addEventListener('click',hideAllModals);
+  $('dashboardSelect').addEventListener('change',(e)=>{state.selectedHabitId=e.target.value;renderDashboardStats();});
+  document.addEventListener('keydown',(e)=>{if(e.key==='Escape')hideAllModals();});
+  [$('habitName'),$('habitGoal')].forEach(el=>el.addEventListener('keydown',(e)=>{if(e.key==='Enter')saveHabit();}));
+  window.addEventListener('resize',()=>{
+    if(state.currentView==='dashboard'&&state.selectedHabitId){
+      const h=state.habits.find(h=>h.id===state.selectedHabitId);
+      if(h) renderHeatmap(HabitLogic.getLast30Days(h));
+    }
   });
 };
 
@@ -804,23 +613,13 @@ const initEvents = () => {
    INIT
 ═══════════════════════════════════════════════════════════ */
 const init = () => {
-  // Recalc streaks on load (handles missed days)
-  state.habits.forEach(h => HabitLogic.recalcStreaks(h));
+  state.habits.forEach(h=>HabitLogic.recalcStreaks(h));
   Storage.save(state.habits);
-
-  // Set date in sidebar
   $('sidebarDate').textContent = DateUtils.formatFull();
-
   initEvents();
   renderHabitsView();
-
-  // Register service worker
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js')
-        .catch(err => console.warn('SW registration failed:', err));
-    });
-  }
+  if('serviceWorker' in navigator)
+    window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js').catch(()=>{}));
 };
 
 document.addEventListener('DOMContentLoaded', init);
