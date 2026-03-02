@@ -15,10 +15,8 @@
 </head>
 <body>
 
-  <!-- NOISE OVERLAY -->
   <div class="noise-overlay"></div>
 
-  <!-- APP SHELL -->
   <div id="app" class="app">
 
     <!-- SIDEBAR -->
@@ -30,18 +28,14 @@
         </div>
         <button class="sidebar-close" id="sidebarClose" aria-label="Close menu">✕</button>
       </div>
-
       <nav class="sidebar-nav">
         <button class="nav-item active" data-view="habits" id="navHabits">
-          <span class="nav-icon">⬡</span>
-          <span>Habits</span>
+          <span class="nav-icon">⬡</span><span>Habits</span>
         </button>
         <button class="nav-item" data-view="dashboard" id="navDashboard">
-          <span class="nav-icon">◎</span>
-          <span>Dashboard</span>
+          <span class="nav-icon">◎</span><span>Dashboard</span>
         </button>
       </nav>
-
       <div class="sidebar-footer">
         <p class="sidebar-date" id="sidebarDate"></p>
       </div>
@@ -50,15 +44,12 @@
     <!-- MAIN -->
     <main class="main" id="main">
 
-      <!-- TOP BAR -->
       <header class="topbar">
         <button class="menu-btn" id="menuBtn" aria-label="Open menu">
           <span></span><span></span><span></span>
         </button>
         <h1 class="topbar-title" id="topbarTitle">Today's Habits</h1>
-        <button class="add-btn" id="addHabitBtn" aria-label="Add habit">
-          <span>+</span>
-        </button>
+        <button class="add-btn" id="addHabitBtn" aria-label="Add habit"><span>+</span></button>
       </header>
 
       <!-- HABITS VIEW -->
@@ -81,23 +72,47 @@
             <select class="custom-select" id="dashboardSelect"></select>
           </div>
         </div>
+
         <div class="dashboard-content" id="dashboardContent" hidden>
+
+          <!-- Stat cards (milestone + big three) -->
           <div class="stats-grid" id="statsGrid"></div>
-          <div class="charts-grid" id="chartsGrid">
-            <div class="chart-card">
-              <h3 class="chart-title">Last 14 Days</h3>
-              <canvas id="barChart"></canvas>
+
+          <!-- Heatmap -->
+          <div class="chart-card chart-card--full">
+            <h3 class="chart-title">30-Day Activity Heatmap</h3>
+            <div class="heatmap-wrap">
+              <canvas id="heatmapCanvas"></canvas>
             </div>
-            <div class="chart-card">
-              <h3 class="chart-title">Trend</h3>
-              <canvas id="lineChart"></canvas>
-            </div>
-            <div class="chart-card chart-card--wide">
-              <h3 class="chart-title">Weekly Frequency</h3>
-              <canvas id="weekChart"></canvas>
+            <div class="heatmap-legend">
+              <span>Less</span>
+              <span class="legend-dot ld-0"></span>
+              <span class="legend-dot ld-1"></span>
+              <span class="legend-dot ld-2"></span>
+              <span class="legend-dot ld-3"></span>
+              <span class="legend-dot ld-4"></span>
+              <span>More</span>
             </div>
           </div>
+
+          <!-- Charts grid -->
+          <div class="charts-grid" id="chartsGrid">
+            <div class="chart-card">
+              <h3 class="chart-title">Success Rate — Last 14 Days</h3>
+              <canvas id="successRateChart"></canvas>
+            </div>
+            <div class="chart-card">
+              <h3 class="chart-title">Weekly Comparison</h3>
+              <canvas id="weekCompChart"></canvas>
+            </div>
+            <div class="chart-card chart-card--wide">
+              <h3 class="chart-title">All-Time Trend</h3>
+              <canvas id="allTimeTrendChart"></canvas>
+            </div>
+          </div>
+
         </div>
+
         <div class="empty-state" id="dashboardEmpty" hidden>
           <div class="empty-icon">◎</div>
           <h2>No habits to analyze</h2>
@@ -111,7 +126,7 @@
   <!-- MODAL BACKDROP -->
   <div class="modal-backdrop" id="modalBackdrop" hidden></div>
 
-  <!-- ADD / EDIT HABIT MODAL -->
+  <!-- ADD / EDIT MODAL -->
   <div class="modal" id="habitModal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-header">
       <h2 id="modalTitle">New Habit</h2>
@@ -148,7 +163,7 @@
     </div>
   </div>
 
-  <!-- DELETE CONFIRM MODAL -->
+  <!-- DELETE MODAL -->
   <div class="modal modal--sm" id="deleteModal" hidden role="dialog" aria-modal="true">
     <div class="modal-header">
       <h2>Delete Habit</h2>
