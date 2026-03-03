@@ -450,11 +450,14 @@ const renderHabitsView = () => {
     </div>`;
 
   const list=$('habitsList'); list.innerHTML='';
-  const isEmpty = !state.habits.length;
-  $('emptyState').hidden = !isEmpty;
-  strip.hidden = isEmpty;
-  list.hidden = isEmpty;
-  if(!isEmpty){
+  if(!state.habits.length){
+    strip.style.display = 'none';
+    list.style.display  = 'none';
+    $('emptyState').style.display = 'flex';
+  } else {
+    strip.style.display = '';
+    list.style.display  = '';
+    $('emptyState').style.display = 'none';
     state.habits.forEach((h,i) => list.appendChild(renderHabitCard(h,i)));
   }
 };
@@ -465,16 +468,16 @@ const renderHabitsView = () => {
 const renderDashboard = () => {
   const sel=$('dashboardSelect'); sel.innerHTML='';
 
+  // Hide everything first, then show what's needed
+  $('dashboardSelectWrap').style.display='none';
+  $('dashboardContent').style.display='none';
+  $('dashboardEmpty').style.display='none';
+  $('dashboardNoData').style.display='none';
+
   if(!state.habits.length){
-    $('dashboardSelectWrap').hidden=true;
-    $('dashboardContent').hidden=true;
-    $('dashboardEmpty').hidden=false;
-    $('dashboardNoData').hidden=true;
+    $('dashboardEmpty').style.display='flex';
     return;
   }
-
-  $('dashboardEmpty').hidden=true;
-  $('dashboardNoData').hidden=true;
   $('dashboardSelectWrap').hidden=false;
   state.habits.forEach(h=>{const o=document.createElement('option');o.value=h.id;o.textContent=h.name;sel.appendChild(o);});
   if(state.selectedHabitId) sel.value=state.selectedHabitId;
@@ -493,14 +496,15 @@ const renderDashboardStats = () => {
 
   // No data state
   if(!s.hasData){
-    $('dashboardContent').hidden=true;
-    $('dashboardEmpty').hidden=true;
-    $('dashboardNoData').hidden=false;
+    $('dashboardContent').style.display='none';
+    $('dashboardEmpty').style.display='none';
+    $('dashboardNoData').style.display='flex';
     return;
   }
 
-  $('dashboardNoData').hidden=true;
-  $('dashboardContent').hidden=false;
+  $('dashboardNoData').style.display='none';
+  $('dashboardEmpty').style.display='none';
+  $('dashboardContent').style.display='';
 
   $('statsGrid').innerHTML=`
     <div class="stat-card stat-card--milestone">
