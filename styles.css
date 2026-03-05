@@ -596,7 +596,11 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   width: 250px;
   box-shadow: var(--shadow-lg), 0 0 40px rgba(251,113,133,.1);
   z-index: 9100;
-  animation: modalIn .2s cubic-bezier(.34,1.56,.64,1) forwards;
+  animation: priorityMenuIn .2s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+@keyframes priorityMenuIn {
+  from { opacity: 0; transform: translateX(-50%) scale(.92); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
 }
 .priority-menu-title {
   font-size: .72rem; font-weight: 600; text-transform: uppercase;
