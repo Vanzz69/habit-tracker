@@ -51,7 +51,10 @@ const signUpWithEmail = async (email, password, name) => {
   return cred;
 };
 
-const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+const resetPassword = (email) => sendPasswordResetEmail(auth, email, {
+  url: 'https://vanzz69.github.io',
+  handleCodeInApp: false,
+});
 
 const logOut = () => signOut(auth);
 
