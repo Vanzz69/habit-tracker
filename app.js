@@ -8,6 +8,7 @@ import {
   auth, onAuthStateChanged,
   signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, logOut,
   saveHabitsToCloud, loadHabitsFromCloud, subscribeToHabits,
+  saveTasksToCloud, loadTasksFromCloud,
 } from './firebase.js';
 
 /* ═══════════════════════════════════════════════════════════
@@ -184,11 +185,11 @@ const HabitLogic = (() => {
    STATE
 ═══════════════════════════════════════════════════════════ */
 const state = {
-  habits:[],currentView:'habits',
-  editingId:null,deletingId:null,selectedHabitId:null,
+  habits:[],tasks:[],currentView:'habits',currentTasksView:'today',
+  editingId:null,deletingId:null,deletingTaskId:null,selectedHabitId:null,
   charts:{},user:null,isOfflineMode:false,unsubscribeSync:null,
-  dragSrcIndex:null,
-  priorityMenuId:null,
+  dragSrcIndex:null,taskDragSrcIndex:null,priorityMenuId:null,
+  notificationTimers:[],
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -203,6 +204,21 @@ const saveHabits = async () => {
       showSyncToast('Syncing…');
       await saveHabitsToCloud(state.user.uid,state.habits);
       showSyncToast('Synced ✓',true);
+    },1000);
+  }
+};
+
+const TASKS_KEY = 'momentum_tasks_v1';
+const loadLocalTasks = () => { try { return JSON.parse(localStorage.getItem(TASKS_KEY)) || []; } catch { return []; } };
+const saveLocalTasks = (t) => { try { localStorage.setItem(TASKS_KEY, JSON.stringify(t)); } catch {} };
+
+let taskSyncTimeout = null;
+const saveTasks = async () => {
+  saveLocalTasks(state.tasks);
+  if(state.user&&!state.isOfflineMode){
+    clearTimeout(taskSyncTimeout);
+    taskSyncTimeout=setTimeout(async()=>{
+      await saveTasksToCloud(state.user.uid, state.tasks);
     },1000);
   }
 };
@@ -341,10 +357,11 @@ const initAuthEvents = () => {
     }
   });
 
-  document.getElementById('offlineBtn').addEventListener('click',()=>{
+  document.getElementById('offlineBtn').addEventListener('click',()=>{\
     state.isOfflineMode=true;
     state.habits=LocalStorage.load();
     state.habits.forEach(h=>HabitLogic.recalcStreaks(h));
+    state.tasks=loadLocalTasks();
     showScreen('app');
     initAppUI();
     hideSkeleton();
@@ -391,6 +408,12 @@ const handleAuthStateChange = async (user) => {
     }
     state.habits.forEach(h=>HabitLogic.recalcStreaks(h));
     HabitLogic.processPriorityOnLoad(state.habits);
+
+    const cloudTasks = await loadTasksFromCloud(user.uid);
+    if(cloudTasks!==null){ state.tasks=cloudTasks; saveLocalTasks(state.tasks); }
+    else { state.tasks=loadLocalTasks(); if(state.tasks.length>0) await saveTasksToCloud(user.uid,state.tasks); }
+    processDueTasks();
+
     showSyncToast('Synced ✓',true);
 
     if(state.unsubscribeSync) state.unsubscribeSync();
@@ -421,7 +444,7 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const showModal=(id)=>{$(id).hidden=false;$('modalBackdrop').hidden=false;};
 const hideModal=(id)=>{$(id).hidden=true;$('modalBackdrop').hidden=true;};
-const hideAllModals=()=>{['habitModal','deleteModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
+const hideAllModals=()=>{['habitModal','deleteModal','deleteTaskModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
 
 /* ═══════════════════════════════════════════════════════════
    PRIORITY CONTEXT MENU
@@ -528,25 +551,30 @@ const openPriorityMenu = (habitId, anchorEl) => {
 // Long press detection — works on both touch and mouse
 const addLongPress = (el, habitId, callback) => {
   let timer = null;
-  let moved = false;
+  let startX = 0, startY = 0;
+  const MOVE_THRESHOLD = 8;
 
   const start = (e) => {
-    moved = false;
+    const touch = e.touches ? e.touches[0] : e;
+    startX = touch.clientX; startY = touch.clientY;
     el.classList.add('long-press-hold');
     timer = setTimeout(() => {
-      if (!moved) {
-        el.classList.remove('long-press-hold');
-        el.classList.add('long-press-triggered');
-        setTimeout(() => el.classList.remove('long-press-triggered'), 400);
-        callback(habitId, el);
-      }
+      el.classList.remove('long-press-hold');
+      el.classList.add('long-press-triggered');
+      setTimeout(() => el.classList.remove('long-press-triggered'), 400);
+      callback(habitId, el);
     }, 700);
   };
   const cancel = () => {
-    clearTimeout(timer);
+    clearTimeout(timer); timer = null;
     el.classList.remove('long-press-hold');
   };
-  const move = () => { moved = true; cancel(); };
+  const move = (e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    const dx = Math.abs(touch.clientX - startX);
+    const dy = Math.abs(touch.clientY - startY);
+    if (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) cancel();
+  };
 
   el.addEventListener('touchstart', start, { passive: true });
   el.addEventListener('touchend', cancel);
@@ -554,7 +582,9 @@ const addLongPress = (el, habitId, callback) => {
   el.addEventListener('mousedown', start);
   el.addEventListener('mouseup', cancel);
   el.addEventListener('mousemove', move);
-  el.addEventListener('contextmenu', (e) => { e.preventDefault(); callback(habitId, el); });
+  // Cancel immediately when drag begins
+  el.addEventListener('dragstart', cancel);
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); cancel(); callback(habitId, el); });
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -888,12 +918,14 @@ const switchView=(view)=>{
   state.currentView=view;
   closePriorityMenu();
   $('habitsView').classList.toggle('hidden',view!=='habits');
+  $('tasksView').classList.toggle('hidden',view!=='tasks');
   $('dashboardView').classList.toggle('hidden',view!=='dashboard');
-  // Sync both nav bars
   document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  $('topbarTitle').textContent=view==='habits'?"Today's Habits":'Dashboard';
-  $('addHabitBtn').hidden=view!=='habits';
+  const titles = { habits:"Today's Habits", tasks:"Tasks", dashboard:"Dashboard" };
+  $('topbarTitle').textContent = titles[view] || '';
+  $('addHabitBtn').hidden = view !== 'habits';
   if(view==='dashboard') renderDashboard();
+  if(view==='tasks') renderTasksView();
   closeSidebar();
 };
 
@@ -918,7 +950,7 @@ const saveHabit=async()=>{
   if(!goal||goal<1){$('habitGoal').classList.add('error');ok=false;}else $('habitGoal').classList.remove('error');
   if(!ok)return;
   if(state.editingId){const h=state.habits.find(h=>h.id===state.editingId);if(h){h.name=name;h.goal=goal;h.type=selectedType;}}
-  else state.habits.push({id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),name,goal,type:selectedType,createdAt:DateUtils.today(),completions:[],currentStreak:0,longestStreak:0});
+  else state.habits.push({id:genId(),name,goal,type:selectedType,createdAt:DateUtils.today(),completions:[],currentStreak:0,longestStreak:0});
   await saveHabits();hideModal('habitModal');renderHabitsView();
 };
 
@@ -945,6 +977,249 @@ const completeHabit=async(id, cardEl)=>{
 const undoHabit=async(id)=>{const h=state.habits.find(h=>h.id===id);if(!h)return;HabitLogic.undo(h);await saveHabits();renderHabitsView();};
 
 /* ═══════════════════════════════════════════════════════════
+   NOTIFICATIONS
+═══════════════════════════════════════════════════════════ */
+const requestNotificationPermission = async () => {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+};
+
+const scheduleTaskNotification = (task) => {
+  if (!task.time || task.completed) return;
+  const today = DateUtils.today();
+  if (task.date !== today) return;
+  const [h, m] = task.time.split(':').map(Number);
+  const now = new Date();
+  const fireAt = new Date();
+  fireAt.setHours(h, m, 0, 0);
+  const ms = fireAt - now;
+  if (ms <= 0) return; // time already passed
+  const timer = setTimeout(async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) return;
+    const notif = new Notification('⏰ Task Due — Momentum', {
+      body: task.title,
+      icon: './icons/icon-192.png',
+      badge: './icons/icon-192.png',
+      tag: task.id,
+      renotify: true,
+    });
+    notif.onclick = () => { window.focus(); switchView('tasks'); };
+  }, ms);
+  state.notificationTimers.push({ id: task.id, timer });
+};
+
+const cancelTaskNotification = (taskId) => {
+  const idx = state.notificationTimers.findIndex(t => t.id === taskId);
+  if (idx !== -1) { clearTimeout(state.notificationTimers[idx].timer); state.notificationTimers.splice(idx, 1); }
+};
+
+const scheduleAllNotifications = () => {
+  state.notificationTimers.forEach(t => clearTimeout(t.timer));
+  state.notificationTimers.length = 0;
+  state.tasks.forEach(t => scheduleTaskNotification(t));
+};
+
+/* ═══════════════════════════════════════════════════════════
+   TASK HELPERS
+═══════════════════════════════════════════════════════════ */
+const genId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+const todayTasksSorted = () => {
+  const today = DateUtils.today();
+  const tasks = state.tasks.filter(t => t.date === today);
+  const incomplete = tasks.filter(t => !t.completed).sort((a,b) => {
+    if (!a.time && !b.time) return 0;
+    if (!a.time) return 1; if (!b.time) return -1;
+    return a.time.localeCompare(b.time);
+  });
+  const complete = tasks.filter(t => t.completed).sort((a,b) => (a.completedAt||0)-(b.completedAt||0));
+  return { incomplete, complete };
+};
+const upcomingTasksSorted = () => {
+  const today = DateUtils.today();
+  return state.tasks
+    .filter(t => t.date > today)
+    .sort((a,b) => { const dc=a.date.localeCompare(b.date); if(dc) return dc; if(!a.time&&!b.time) return 0; if(!a.time) return 1; if(!b.time) return -1; return a.time.localeCompare(b.time); });
+};
+const fmt12 = (time24) => {
+  if (!time24) return '';
+  const [h,m] = time24.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+};
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER: TASKS VIEW
+═══════════════════════════════════════════════════════════ */
+const renderTasksView = () => {
+  if (state.currentTasksView === 'today') renderTodayTasks();
+  else renderUpcomingTasks();
+};
+
+const renderTodayTasks = () => {
+  const list = $('todayTasksList');
+  list.innerHTML = '';
+  const { incomplete, complete } = todayTasksSorted();
+  const all = [...incomplete, ...complete];
+
+  if (!all.length) {
+    list.style.display = 'none';
+    $('todayTasksEmpty').style.display = 'flex';
+  } else {
+    list.style.display = '';
+    $('todayTasksEmpty').style.display = 'none';
+    // Divider between incomplete and complete
+    incomplete.forEach((t, i) => list.appendChild(buildTaskCard(t, i, 'today')));
+    if (complete.length && incomplete.length) {
+      const div = document.createElement('div');
+      div.className = 'tasks-divider';
+      div.innerHTML = '<span>Completed</span>';
+      list.appendChild(div);
+    }
+    complete.forEach((t, i) => list.appendChild(buildTaskCard(t, incomplete.length + i, 'today')));
+  }
+};
+
+const renderUpcomingTasks = () => {
+  const list = $('upcomingTasksList');
+  list.innerHTML = '';
+  const tasks = upcomingTasksSorted();
+  if (!tasks.length) {
+    list.style.display = 'none';
+    $('upcomingTasksEmpty').style.display = 'flex';
+  } else {
+    list.style.display = '';
+    $('upcomingTasksEmpty').style.display = 'none';
+    // Group by date
+    const grouped = {};
+    tasks.forEach(t => { if (!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
+    Object.keys(grouped).sort().forEach(date => {
+      const header = document.createElement('div');
+      header.className = 'tasks-date-header';
+      const d = new Date(date + 'T00:00:00');
+      header.textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+      list.appendChild(header);
+      grouped[date].forEach((t, i) => list.appendChild(buildTaskCard(t, i, 'upcoming')));
+    });
+  }
+};
+
+const buildTaskCard = (task, index, pane) => {
+  const card = document.createElement('div');
+  card.className = `task-card${task.completed ? ' task-completed' : ''}`;
+  card.dataset.id = task.id;
+  card.dataset.index = index;
+  if (!task.completed && pane === 'today') card.draggable = true;
+
+  card.innerHTML = `
+    ${!task.completed && pane === 'today' ? '<div class="drag-handle task-drag-handle">⠿</div>' : '<div class="drag-handle task-drag-handle" style="opacity:0;pointer-events:none">⠿</div>'}
+    <button class="task-check${task.completed ? ' checked' : ''}" data-id="${task.id}" aria-label="Complete task">
+      ${task.completed ? '✓' : ''}
+    </button>
+    <div class="task-body">
+      <span class="task-title">${esc(task.title)}</span>
+      ${task.time ? `<span class="task-time">${fmt12(task.time)}</span>` : ''}
+      ${pane === 'upcoming' ? `<span class="task-date-tag">${DateUtils.formatShort(task.date)}</span>` : ''}
+    </div>
+    <button class="task-delete-btn" data-id="${task.id}" title="Delete">✕</button>`;
+
+  // Drag reorder (today incomplete only)
+  if (!task.completed && pane === 'today') {
+    card.addEventListener('dragstart', (e) => {
+      state.taskDragSrcIndex = index;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault(); card.classList.remove('drag-over');
+      const targetIndex = parseInt(card.dataset.index);
+      if (state.taskDragSrcIndex === null || state.taskDragSrcIndex === targetIndex) return;
+      const today = DateUtils.today();
+      const incomplete = state.tasks.filter(t => t.date === today && !t.completed);
+      const others = state.tasks.filter(t => !(t.date === today && !t.completed));
+      const moved = incomplete.splice(state.taskDragSrcIndex, 1)[0];
+      incomplete.splice(targetIndex, 0, moved);
+      state.tasks = [...incomplete, ...others];
+      state.taskDragSrcIndex = null;
+      await saveTasks(); renderTodayTasks();
+    });
+  }
+
+  return card;
+};
+
+/* ═══════════════════════════════════════════════════════════
+   TASK ACTIONS
+═══════════════════════════════════════════════════════════ */
+const addTodayTask = async () => {
+  const title = $('taskTitleInput').value.trim();
+  if (!title) { $('taskTitleInput').classList.add('error'); setTimeout(() => $('taskTitleInput').classList.remove('error'), 800); return; }
+  const time = $('taskTimeInput').value || null;
+  const task = { id: genId(), title, date: DateUtils.today(), time, completed: false, completedAt: null };
+  if (time) {
+    const granted = await requestNotificationPermission();
+    if (granted) scheduleTaskNotification(task);
+  }
+  state.tasks.push(task);
+  $('taskTitleInput').value = ''; $('taskTimeInput').value = '';
+  await saveTasks(); renderTodayTasks();
+};
+
+const addScheduledTask = async () => {
+  const title = $('scheduledTitleInput').value.trim();
+  const date  = $('scheduledDateInput').value;
+  if (!title) { $('scheduledTitleInput').classList.add('error'); setTimeout(() => $('scheduledTitleInput').classList.remove('error'), 800); return; }
+  if (!date)  { $('scheduledDateInput').classList.add('error');  setTimeout(() => $('scheduledDateInput').classList.remove('error'), 800); return; }
+  if (date <= DateUtils.today()) { $('scheduledDateInput').classList.add('error'); setTimeout(() => $('scheduledDateInput').classList.remove('error'), 800); return; }
+  const time = $('scheduledTimeInput').value || null;
+  state.tasks.push({ id: genId(), title, date, time, completed: false, completedAt: null });
+  $('scheduledTitleInput').value = ''; $('scheduledDateInput').value = ''; $('scheduledTimeInput').value = '';
+  await saveTasks(); renderUpcomingTasks();
+};
+
+const completeTask = async (id) => {
+  const t = state.tasks.find(t => t.id === id); if (!t) return;
+  t.completed = true; t.completedAt = Date.now();
+  cancelTaskNotification(id);
+  await saveTasks(); renderTodayTasks();
+};
+
+const uncompleteTask = async (id) => {
+  const t = state.tasks.find(t => t.id === id); if (!t) return;
+  t.completed = false; t.completedAt = null;
+  scheduleTaskNotification(t);
+  await saveTasks(); renderTodayTasks();
+};
+
+const openDeleteTaskModal = (id) => {
+  const t = state.tasks.find(t => t.id === id); if (!t) return;
+  state.deletingTaskId = id;
+  $('deleteTaskName').textContent = t.title;
+  showModal('deleteTaskModal');
+};
+
+const confirmDeleteTask = async () => {
+  cancelTaskNotification(state.deletingTaskId);
+  state.tasks = state.tasks.filter(t => t.id !== state.deletingTaskId);
+  hideModal('deleteTaskModal');
+  await saveTasks(); renderTasksView();
+};
+
+// Move scheduled tasks to today when their date arrives (called on load)
+const processDueTasks = () => {
+  // Nothing to do structurally — tasks already filter by date.
+  // But reschedule notifications for today's tasks on every load.
+  scheduleAllNotifications();
+};
+
+/* ═══════════════════════════════════════════════════════════
    APP UI INIT
 ═══════════════════════════════════════════════════════════ */
 let appUIInited=false;
@@ -968,7 +1243,48 @@ const initAppUI=()=>{
     const db=e.target.closest('.icon-btn-delete');if(db){openDeleteModal(db.dataset.id);return;}
   });
 
-  $('typeDaily').addEventListener('click',()=>setTypeActive('daily'));
+  // Task toggle (Today / Upcoming)
+  document.querySelectorAll('.tasks-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.currentTasksView = btn.dataset.tasksview;
+      document.querySelectorAll('.tasks-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+      $('todayTasksPane').style.display   = state.currentTasksView === 'today'    ? '' : 'none';
+      $('upcomingTasksPane').style.display = state.currentTasksView === 'upcoming' ? '' : 'none';
+      renderTasksView();
+    });
+  });
+
+  // Add task buttons
+  $('addTaskBtn').addEventListener('click', addTodayTask);
+  $('addScheduledBtn').addEventListener('click', addScheduledTask);
+  $('taskTitleInput').addEventListener('keydown', e => { if(e.key==='Enter') addTodayTask(); });
+  $('scheduledTitleInput').addEventListener('keydown', e => { if(e.key==='Enter') addScheduledTask(); });
+
+  // Set min date for scheduled task to tomorrow
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  $('scheduledDateInput').min = tomorrow.toISOString().split('T')[0];
+
+  // Task list click delegation (complete, uncomplete, delete)
+  ['todayTasksList','upcomingTasksList'].forEach(listId => {
+    $(listId).addEventListener('click', async (e) => {
+      const checkBtn = e.target.closest('.task-check');
+      if (checkBtn) {
+        const id = checkBtn.dataset.id;
+        const t = state.tasks.find(t => t.id === id);
+        if (!t) return;
+        if (t.completed) await uncompleteTask(id);
+        else await completeTask(id);
+        return;
+      }
+      const delBtn = e.target.closest('.task-delete-btn');
+      if (delBtn) { openDeleteTaskModal(delBtn.dataset.id); return; }
+    });
+  });
+
+  // Delete task modal
+  $('deleteTaskConfirmBtn').addEventListener('click', confirmDeleteTask);
+  $('deleteTaskCancelBtn').addEventListener('click', () => hideModal('deleteTaskModal'));
+  $('deleteTaskModalClose').addEventListener('click', () => hideModal('deleteTaskModal'));
   $('typeFlexible').addEventListener('click',()=>setTypeActive('flexible'));
   $('modalSave').addEventListener('click',saveHabit);
   $('modalCancel').addEventListener('click',()=>hideModal('habitModal'));
