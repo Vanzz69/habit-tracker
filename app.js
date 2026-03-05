@@ -327,8 +327,11 @@ const initAuthEvents = () => {
         err.textContent='No account found with that email address.';
       } else if(e.code==='auth/too-many-requests') {
         err.textContent='Too many attempts. Please try again later.';
+      } else if(e.code==='auth/missing-email') {
+        err.textContent='Please enter your email address.';
       } else {
-        err.textContent=`Failed to send email. (${e.code || 'unknown error'})`;
+        // Show real error so we can debug
+        err.textContent=`Error: ${e.code || e.message}`;
       }
     } finally {
       btn.textContent='Send Reset Link'; btn.disabled=false;
@@ -424,6 +427,8 @@ let priorityMenuEl = null;
 
 const closePriorityMenu = () => {
   if (priorityMenuEl) { priorityMenuEl.remove(); priorityMenuEl = null; }
+  const bd = document.getElementById('priorityBackdrop');
+  if (bd) bd.remove();
   state.priorityMenuId = null;
 };
 
@@ -458,22 +463,29 @@ const openPriorityMenu = (habitId, anchorEl) => {
     </button>
   `;
 
-  // Position — always fully on screen
-  const rect = anchorEl.getBoundingClientRect();
-  const menuW = 260, menuH = 160;
-  const padding = 12;
-  let top = rect.bottom + 8;
-  let left = rect.left;
-  // Flip above if not enough room below
-  if (top + menuH > window.innerHeight - padding) top = rect.top - menuH - 8;
-  // Clamp horizontally
-  left = Math.max(padding, Math.min(left, window.innerWidth - menuW - padding));
-  // Clamp vertically
-  top = Math.max(padding, top);
-  menu.style.position = 'fixed';
-  menu.style.top  = `${top}px`;
-  menu.style.left = `${left}px`;
-  menu.style.width = `${menuW}px`;
+  // Position: center on mobile, near card on desktop
+  const menuW = 260;
+  const isMobile = window.innerWidth <= 700;
+  if (isMobile) {
+    // Center horizontally, place in lower-middle of screen
+    menu.style.position = 'fixed';
+    menu.style.bottom = '90px'; // above bottom nav
+    menu.style.left = `${Math.round((window.innerWidth - menuW) / 2)}px`;
+    menu.style.width = `${menuW}px`;
+    menu.style.top = 'auto';
+  } else {
+    const rect = anchorEl.getBoundingClientRect();
+    const menuH = 170, padding = 12;
+    let top = rect.bottom + 8;
+    let left = rect.left;
+    if (top + menuH > window.innerHeight - padding) top = rect.top - menuH - 8;
+    left = Math.max(padding, Math.min(left, window.innerWidth - menuW - padding));
+    top = Math.max(padding, top);
+    menu.style.position = 'fixed';
+    menu.style.top  = `${top}px`;
+    menu.style.left = `${left}px`;
+    menu.style.width = `${menuW}px`;
+  }
 
   menu.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-action]');
@@ -494,6 +506,15 @@ const openPriorityMenu = (habitId, anchorEl) => {
 
   document.body.appendChild(menu);
   priorityMenuEl = menu;
+
+  // On mobile add a dim backdrop
+  if (window.innerWidth <= 700) {
+    const bd = document.createElement('div');
+    bd.className = 'priority-backdrop';
+    bd.id = 'priorityBackdrop';
+    document.body.appendChild(bd);
+    bd.addEventListener('click', closePriorityMenu);
+  }
 
   // Close on outside click
   setTimeout(() => {
