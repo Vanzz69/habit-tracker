@@ -21,7 +21,9 @@ import {
   setDoc,
   getDoc,
   onSnapshot,
-  enableIndexedDbPersistence,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -35,9 +37,9 @@ const firebaseConfig = {
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db   = getFirestore(app);
-
-enableIndexedDbPersistence(db).catch(() => {});
+const db   = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 
 /* ── AUTH ── */
 const signInWithGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
