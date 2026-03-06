@@ -9,7 +9,7 @@ import {
   signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, logOut,
   saveHabitsToCloud, loadHabitsFromCloud, subscribeToHabits,
   saveTasksToCloud, loadTasksFromCloud,
-} from './firebase.js';
+} from './firebase.js?v=8';
 
 /* ═══════════════════════════════════════════════════════════
    LOCAL STORAGE
