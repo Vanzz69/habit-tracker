@@ -9,6 +9,7 @@ import {
   signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, logOut,
   saveHabitsToCloud, loadHabitsFromCloud, subscribeToHabits,
   saveTasksToCloud, loadTasksFromCloud,
+  checkRedirectResult,
 } from './firebase.js';
 
 /* ═══════════════════════════════════════════════════════════
@@ -301,8 +302,22 @@ const initAuthEvents = () => {
 
   const handleGoogle = async (errorId) => {
     document.getElementById(errorId).textContent='';
-    try { await signInWithGoogle(); }
-    catch { document.getElementById(errorId).textContent='Google sign-in failed. Try again.'; }
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    try {
+      if (isMobile) {
+        // Show loading — page will redirect, onAuthStateChanged handles result
+        document.getElementById(errorId).textContent='';
+        const btn = errorId === 'loginError'
+          ? document.getElementById('googleSignInBtn')
+          : document.getElementById('googleSignUpBtn');
+        btn.textContent = 'Redirecting…'; btn.disabled = true;
+      }
+      await signInWithGoogle();
+    } catch(e) {
+      document.getElementById(errorId).textContent = e.code === 'auth/popup-blocked'
+        ? 'Popup blocked. Try again or use email sign-in.'
+        : 'Google sign-in failed. Try again.';
+    }
   };
   document.getElementById('googleSignInBtn').addEventListener('click',()=>handleGoogle('loginError'));
   document.getElementById('googleSignUpBtn').addEventListener('click',()=>handleGoogle('signupError'));
@@ -416,7 +431,7 @@ const handleAuthStateChange = async (user) => {
       const cloudTasks = await loadTasksFromCloud(user.uid);
       if(cloudTasks!==null){ state.tasks=cloudTasks; saveLocalTasks(state.tasks); }
       else { state.tasks=loadLocalTasks(); if(state.tasks.length>0) await saveTasksToCloud(user.uid,state.tasks); }
-      processDueTasks();
+      await processDueTasks();
 
       showSyncToast('Synced ✓',true);
 
@@ -757,6 +772,36 @@ const milestoneBadge=(n,isDaily=false)=>{
   return n<=10?'🌱':n<=25?'⭐':n<=50?'🔥':n<=100?'💎':n<=250?'🏆':n<=500?'👑':'🌟';
 };
 
+// Returns which of 5 journey stages the user is at, and progress within it
+const getMilestoneJourney = (s) => {
+  const milestones = s.isMSDaily
+    ? [7, 21, 45, 90, 180]   // 5 daily milestones = journey complete
+    : [10, 25, 50, 100, 250]; // 5 flexible milestones
+  const val = s.msValue;
+  const total = milestones[4]; // 5th = "habit completed"
+
+  // Which stage are we in (0-indexed)
+  let stage = 0;
+  for (let i = 0; i < milestones.length; i++) {
+    if (val >= milestones[i]) stage = i + 1;
+  }
+  stage = Math.min(stage, 5);
+
+  // Progress within current stage
+  const stageStart = stage === 0 ? 0 : milestones[stage - 1];
+  const stageEnd   = stage < 5 ? milestones[stage] : milestones[4];
+  const stagePct   = stageEnd === stageStart ? 100
+    : Math.round(((val - stageStart) / (stageEnd - stageStart)) * 100);
+
+  const labels = ['🌱 Beginning', '⭐ Building', '🔥 Committed', '💎 Dedicated', '🏆 Mastered'];
+  const nextLabel = stage < 5 ? `${milestones[stage]} ${s.isMSDaily?'days':'logs'}` : 'Complete!';
+
+  return { stage, stagePct: Math.max(0, Math.min(100, stagePct)),
+    stageLabel: labels[Math.max(0, stage - (stage===5?0:0))],
+    milestones, val, nextLabel,
+    currentLabel: labels[Math.max(0, Math.min(stage, 4))] };
+};
+
 const renderDashboardStats = () => {
   const habit=state.habits.find(h=>h.id===state.selectedHabitId); if(!habit) return;
   const s=HabitLogic.computeStats(habit);
@@ -773,24 +818,41 @@ const renderDashboardStats = () => {
   $('dashboardEmpty').style.display='none';
   $('dashboardContent').style.display='';
 
+  const journey = getMilestoneJourney(s);
+  const journeyDots = Array.from({length:5}, (_,i) => {
+    const filled = i < journey.stage;
+    const active = i === journey.stage - 1 || (journey.stage === 0 && i === 0);
+    return `<div class="journey-dot ${filled?'filled':''} ${active?'active':''}" title="${journey.milestones[i]} ${s.isMSDaily?'days':'logs'}">
+      <span>${i+1}</span>
+    </div>`;
+  }).join('<div class="journey-line"></div>');
+
   $('statsGrid').innerHTML=`
     <div class="stat-card stat-card--milestone">
       <div class="milestone-header">
         <div>
-          <div class="milestone-title">🏆 Milestone Tracker</div>
-          <div class="milestone-sub">
-            ${s.isMSDaily?`<strong>${s.msValue} days</strong> completed`:`<strong>${s.msValue} logs</strong> total`} ·
-            <span class="milestone-next">${s.nextMilestone-s.msValue} ${s.isMSDaily?'days':'logs'} away from <strong>${s.nextMilestone}</strong> ${milestoneBadge(s.nextMilestone,s.isMSDaily)}</span>
+          <div class="milestone-title">🗺️ Journey Progress</div>
+          <div class="milestone-fraction">
+            <span class="fraction-current">${journey.stage}</span>
+            <span class="fraction-sep">/</span>
+            <span class="fraction-total">5</span>
+            <span class="fraction-label">${journey.currentLabel}</span>
           </div>
-          <div class="milestone-type-tag">${s.isMSDaily?'📅 Consistency milestones':'📊 Volume milestones'}</div>
+          <div class="milestone-sub">
+            ${s.isMSDaily?`<strong>${s.msValue} days</strong> logged`:`<strong>${s.msValue} logs</strong> total`}
+            ${journey.stage < 5 ? `· <span class="milestone-next">${journey.nextLabel} to next milestone</span>` : ' · <span class="milestone-next" style="color:var(--green)">Habit mastered! 🏆</span>'}
+          </div>
         </div>
-        <div class="milestone-badge-icon">${milestoneBadge(s.nextMilestone,s.isMSDaily)}</div>
       </div>
-      <div class="milestone-bar-wrap">
-        <div class="milestone-bar"><div class="milestone-fill" style="width:${s.milestoneProgress}%"></div></div>
-        <span class="milestone-pct">${s.milestoneProgress}%</span>
+      <div class="journey-track">${journeyDots}</div>
+      <div class="milestone-bar-wrap" style="margin-top:var(--sp-3)">
+        <div class="milestone-bar"><div class="milestone-fill" style="width:${journey.stagePct}%"></div></div>
+        <span class="milestone-pct">${journey.stagePct}%</span>
       </div>
-      <div class="milestone-labels"><span>${s.prevMilestone} ${s.isMSDaily?'days':'logs'}</span><span>${s.nextMilestone} ${s.isMSDaily?'days':'logs'}</span></div>
+      <div class="milestone-labels">
+        <span>${journey.stage > 0 ? journey.milestones[journey.stage-1] : 0} ${s.isMSDaily?'days':'logs'}</span>
+        <span>${journey.nextLabel}</span>
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-card__accent stat-card__accent--purple">◈</div>
@@ -1006,18 +1068,33 @@ const scheduleTaskNotification = (task) => {
   const fireAt = new Date();
   fireAt.setHours(h, m, 0, 0);
   const ms = fireAt - now;
-  if (ms <= 0) return; // time already passed
-  const timer = setTimeout(async () => {
-    const granted = await requestNotificationPermission();
-    if (!granted) return;
-    const notif = new Notification('⏰ Task Due — Momentum', {
-      body: task.title,
-      icon: './icons/icon-192.png',
-      badge: './icons/icon-192.png',
-      tag: task.id,
-      renotify: true,
-    });
-    notif.onclick = () => { window.focus(); switchView('tasks'); };
+  if (ms <= 0) return;
+  if (Notification.permission !== 'granted') return;
+  const timer = setTimeout(() => {
+    try {
+      // Use service worker notification if available (works when app is backgrounded)
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification('⏰ Task Due — Momentum', {
+            body: task.title,
+            icon: './icons/icon-192.png',
+            tag: task.id,
+            renotify: true,
+            requireInteraction: true,
+            data: { taskId: task.id },
+          });
+        });
+      } else {
+        // Fallback to window notification
+        const notif = new Notification('⏰ Task Due — Momentum', {
+          body: task.title,
+          icon: './icons/icon-192.png',
+          tag: task.id,
+          requireInteraction: true,
+        });
+        notif.onclick = () => { window.focus(); switchView('tasks'); notif.close(); };
+      }
+    } catch(e) { console.warn('Notification failed:', e); }
   }, ms);
   state.notificationTimers.push({ id: task.id, timer });
 };
@@ -1033,13 +1110,46 @@ const scheduleAllNotifications = () => {
   state.tasks.forEach(t => scheduleTaskNotification(t));
 };
 
+// Clean up old completed tasks (keep today + future only)
+// Old incomplete tasks get auto-archived (marked as missed) so they don't pollute today
+const cleanOldTasks = async () => {
+  const today = DateUtils.today();
+  const before = state.tasks.length;
+  // Remove completed tasks older than today
+  state.tasks = state.tasks.filter(t => {
+    if (t.date < today && t.completed) return false; // remove old completed
+    return true; // keep everything else (today, future, old incomplete kept as-is)
+  });
+  // Mark old incomplete tasks as missed so they don't show in Today
+  state.tasks.forEach(t => {
+    if (t.date < today && !t.completed) {
+      t.missed = true; // flag but keep for history
+    }
+  });
+  if (state.tasks.length !== before) await saveTasks();
+};
+
+// Set a timer to re-render and clean at midnight
+const scheduleMidnightReset = () => {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0); // next midnight
+  const msToMidnight = midnight - now;
+  setTimeout(async () => {
+    await cleanOldTasks();
+    renderTasksView();
+    scheduleAllNotifications(); // reschedule for new day's tasks
+    scheduleMidnightReset();    // re-arm for next midnight
+  }, msToMidnight);
+};
+
 /* ═══════════════════════════════════════════════════════════
    TASK HELPERS
 ═══════════════════════════════════════════════════════════ */
 const genId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const todayTasksSorted = () => {
   const today = DateUtils.today();
-  const tasks = state.tasks.filter(t => t.date === today);
+  const tasks = state.tasks.filter(t => t.date === today && !t.missed);
   const incomplete = tasks.filter(t => !t.completed).sort((a,b) => {
     if (!a.time && !b.time) return 0;
     if (!a.time) return 1; if (!b.time) return -1;
@@ -1172,13 +1282,13 @@ const addTodayTask = async () => {
   const title = $('taskTitleInput').value.trim();
   if (!title) { $('taskTitleInput').classList.add('error'); setTimeout(() => $('taskTitleInput').classList.remove('error'), 800); return; }
   const time = $('taskTimeInput').value || null;
+  // Request notification permission NOW (during user gesture) if there's a time
+  if (time) await requestNotificationPermission();
   const task = { id: genId(), title, date: DateUtils.today(), time, completed: false, completedAt: null };
-  if (time) {
-    const granted = await requestNotificationPermission();
-    if (granted) scheduleTaskNotification(task);
-  }
   state.tasks.push(task);
   $('taskTitleInput').value = ''; $('taskTimeInput').value = '';
+  // Schedule after permission is already set
+  if (time) scheduleTaskNotification(task);
   await saveTasks(); renderTodayTasks();
 };
 
@@ -1222,11 +1332,11 @@ const confirmDeleteTask = async () => {
   await saveTasks(); renderTasksView();
 };
 
-// Move scheduled tasks to today when their date arrives (called on load)
-const processDueTasks = () => {
-  // Nothing to do structurally — tasks already filter by date.
-  // But reschedule notifications for today's tasks on every load.
+// Called on app load — clean stale tasks, schedule notifications, arm midnight reset
+const processDueTasks = async () => {
+  await cleanOldTasks();
   scheduleAllNotifications();
+  scheduleMidnightReset();
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -1316,6 +1426,13 @@ const initAppUI=()=>{
 ═══════════════════════════════════════════════════════════ */
 const init=()=>{
   initAuthEvents();
+
+  // Handle mobile Google redirect result (page reloads after Google OAuth)
+  checkRedirectResult().then(result => {
+    if (result && result.user) {
+      // Auth state change will fire automatically — nothing extra needed
+    }
+  }).catch(() => {});
 
   // Safety timeout — if Firebase auth hasn't responded in 8s, show login
   const authTimeout = setTimeout(() => {
