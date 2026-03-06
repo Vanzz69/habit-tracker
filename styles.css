@@ -924,3 +924,140 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .history-missed .history-title { color: var(--text-3); }
 .history-time { font-size: .75rem; color: var(--text-3); flex-shrink: 0; }
 .history-empty { color: var(--text-3); font-size: .9rem; text-align: center; padding: var(--sp-6) 0; }
+
+/* ── BOTTOM NAV — 4 items ────────────────────────────────── */
+.bottom-nav { grid-template-columns: repeat(4, 1fr); }
+
+/* ── ACTIVITY CALENDAR ───────────────────────────────────── */
+.activity-calendar { padding: var(--sp-2) 0; }
+.cal-month-title {
+  font-family: 'Syne', sans-serif; font-size: .9rem; font-weight: 700;
+  color: var(--text-2); margin-bottom: var(--sp-3); text-align: center;
+}
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-header {
+  font-size: .7rem; font-weight: 700; color: var(--text-3);
+  text-align: center; padding: 2px 0; text-transform: uppercase;
+}
+.cal-cell {
+  aspect-ratio: 1; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.03);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: .72rem; color: var(--text-3); position: relative;
+  border: 1px solid transparent; transition: all .15s;
+}
+.cal-cell span { line-height: 1; }
+.cal-cell.cal-done {
+  background: rgba(124,107,255,.18); border-color: rgba(124,107,255,.3);
+  color: var(--accent);
+}
+.cal-cell.cal-today {
+  border-color: var(--accent); color: var(--text);
+}
+.cal-cell.cal-future { opacity: .3; }
+.cal-cell.cal-empty { background: transparent; border: none; }
+.cal-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent); margin-top: 2px;
+}
+.cal-legend {
+  display: flex; gap: var(--sp-4); justify-content: center;
+  margin-top: var(--sp-4); flex-wrap: wrap;
+}
+.cal-legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .75rem; color: var(--text-3);
+}
+.cal-dot-ex {
+  width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+}
+.cal-dot-ex.done { background: rgba(124,107,255,.4); border: 1px solid rgba(124,107,255,.6); }
+.cal-dot-ex.today { background: transparent; border: 1px solid var(--accent); }
+.cal-dot-ex.missed { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+
+/* ── GOAL PACE ───────────────────────────────────────────── */
+.goal-pace-wrap { padding: var(--sp-2) 0; }
+.pace-stats {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: var(--sp-3); margin-bottom: var(--sp-4);
+}
+.pace-stat { text-align: center; }
+.pace-stat__val {
+  font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800;
+  color: var(--text); line-height: 1;
+}
+.pace-stat__val span { font-size: .85rem; color: var(--text-3); font-weight: 400; }
+.pace-stat__val.on-track { color: var(--green); }
+.pace-stat__val.off-track { color: var(--red); }
+.pace-stat__label { font-size: .72rem; color: var(--text-3); margin-top: 4px; }
+.pace-bar-wrap { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.pace-bar { flex: 1; height: 8px; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden; }
+.pace-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
+.pace-fill.on-track { background: linear-gradient(90deg,var(--accent),var(--green)); }
+.pace-fill.off-track { background: linear-gradient(90deg,var(--accent),var(--red)); }
+.pace-pct { font-size: .8rem; font-weight: 700; color: var(--text-2); min-width: 36px; text-align: right; }
+.pace-message { font-size: .82rem; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); }
+.pace-good { background: rgba(52,211,153,.08); color: var(--green); }
+.pace-warn { background: rgba(248,113,113,.08); color: var(--red); }
+.pace-complete { font-size: 1rem; font-weight: 600; color: var(--amber); text-align: center; padding: var(--sp-4); }
+
+/* ── JOURNAL VIEW ────────────────────────────────────────── */
+.journal-compose {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: var(--r-lg); padding: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+.journal-title-input {
+  width: 100%; background: transparent; border: none;
+  font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600;
+  color: var(--text); outline: none; padding: 0;
+}
+.journal-title-input::placeholder { color: var(--text-3); font-weight: 400; }
+.journal-body-input {
+  width: 100%; background: transparent; border: none;
+  font-family: 'DM Sans', sans-serif; font-size: .95rem; line-height: 1.6;
+  color: var(--text); outline: none; resize: none; padding: 0;
+  min-height: 100px;
+}
+.journal-body-input::placeholder { color: var(--text-3); }
+.journal-body-input.error { outline: 1px solid var(--red); border-radius: 4px; }
+.journal-compose-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: var(--sp-2); border-top: 1px solid var(--border);
+}
+.journal-compose-date { font-size: .78rem; color: var(--text-3); }
+
+.journal-entries { display: flex; flex-direction: column; gap: var(--sp-3); }
+.journal-card {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: var(--r-lg); padding: var(--sp-4);
+  cursor: pointer; transition: all var(--t-fast);
+}
+.journal-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.journal-card-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--sp-3); margin-bottom: var(--sp-2); flex-wrap: wrap;
+}
+.journal-card-title {
+  font-family: 'Syne', sans-serif; font-weight: 700; font-size: .95rem;
+  color: var(--text);
+}
+.journal-card-title em { color: var(--text-3); font-style: italic; font-weight: 400; }
+.journal-card-date { font-size: .72rem; color: var(--text-3); white-space: nowrap; }
+.journal-card-preview { font-size: .85rem; color: var(--text-2); line-height: 1.5; }
+
+/* ── JOURNAL ENTRY MODAL ─────────────────────────────────── */
+.modal--journal .modal-body { max-height: 65vh; overflow-y: auto; }
+.journal-entry-meta {
+  font-size: .78rem; color: var(--text-3);
+  margin-bottom: var(--sp-4); padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.journal-entry-body {
+  font-size: .95rem; line-height: 1.7; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-word;
+}
