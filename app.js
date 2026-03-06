@@ -9,7 +9,8 @@ import {
   signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, logOut,
   saveHabitsToCloud, loadHabitsFromCloud, subscribeToHabits,
   saveTasksToCloud, loadTasksFromCloud,
-} from './firebase.js?v=8';
+  saveJournalToCloud, loadJournalFromCloud,
+} from './firebase.js?v=9';
 
 /* ═══════════════════════════════════════════════════════════
    LOCAL STORAGE
@@ -185,8 +186,9 @@ const HabitLogic = (() => {
    STATE
 ═══════════════════════════════════════════════════════════ */
 const state = {
-  habits:[],tasks:[],currentView:'habits',currentTasksView:'today',
+  habits:[],tasks:[],journal:[],currentView:'habits',currentTasksView:'today',
   editingId:null,deletingId:null,deletingTaskId:null,selectedHabitId:null,
+  viewingJournalId:null,
   charts:{},user:null,isOfflineMode:false,unsubscribeSync:null,
   dragSrcIndex:null,taskDragSrcIndex:null,priorityMenuId:null,
   notificationTimers:[],
@@ -211,6 +213,10 @@ const saveHabits = async () => {
 const TASKS_KEY = 'momentum_tasks_v1';
 const loadLocalTasks = () => { try { return JSON.parse(localStorage.getItem(TASKS_KEY)) || []; } catch { return []; } };
 const saveLocalTasks = (t) => { try { localStorage.setItem(TASKS_KEY, JSON.stringify(t)); } catch {} };
+
+const JOURNAL_KEY = 'momentum_journal_v1';
+const loadLocalJournal = () => { try { return JSON.parse(localStorage.getItem(JOURNAL_KEY)) || []; } catch { return []; } };
+const saveLocalJournal = (j) => { try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(j)); } catch {} };
 
 let taskSyncTimeout = null;
 const saveTasks = async () => {
@@ -375,6 +381,7 @@ const initAuthEvents = () => {
     state.habits=LocalStorage.load();
     state.habits.forEach(h=>HabitLogic.recalcStreaks(h));
     state.tasks=loadLocalTasks();
+    state.journal=loadLocalJournal();
     showScreen('app');
     initAppUI();
     hideSkeleton();
@@ -427,6 +434,10 @@ const handleAuthStateChange = async (user) => {
       else { state.tasks=loadLocalTasks(); if(state.tasks.length>0) await saveTasksToCloud(user.uid,state.tasks); }
       await processDueTasks();
 
+      const cloudJournal = await loadJournalFromCloud(user.uid);
+      if(cloudJournal!==null){ state.journal=cloudJournal; saveLocalJournal(state.journal); }
+      else { state.journal=loadLocalJournal(); if(state.journal.length>0) await saveJournalToCloud(user.uid,state.journal); }
+
       showSyncToast('Synced ✓',true);
 
       if(state.unsubscribeSync) state.unsubscribeSync();
@@ -463,7 +474,7 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const showModal=(id)=>{$(id).hidden=false;$('modalBackdrop').hidden=false;};
 const hideModal=(id)=>{$(id).hidden=true;$('modalBackdrop').hidden=true;};
-const hideAllModals=()=>{['habitModal','deleteModal','deleteTaskModal','taskHistoryModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
+const hideAllModals=()=>{['habitModal','deleteModal','deleteTaskModal','taskHistoryModal','journalEntryModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
 
 /* ═══════════════════════════════════════════════════════════
    PRIORITY CONTEXT MENU
@@ -961,8 +972,15 @@ const baseScales=()=>({
 
 const renderCharts=(habit)=>{
   destroyCharts();
-  const last14=HabitLogic.getLast14Days(habit),last30=HabitLogic.getLast30Days(habit),allTime=HabitLogic.getAllTimeTrend(habit);
-  renderHeatmap(last30);
+  const last14=HabitLogic.getLast14Days(habit),allTime=HabitLogic.getAllTimeTrend(habit);
+
+  // Monthly activity calendar
+  renderActivityCalendar(habit);
+
+  // Goal pace card
+  renderGoalPace(habit);
+
+  // Success rate
   const srCtx=$('successRateChart').getContext('2d');
   const srGrad=srCtx.createLinearGradient(0,0,0,180);
   srGrad.addColorStop(0,'rgba(124,107,255,0.3)');srGrad.addColorStop(1,'rgba(124,107,255,0)');
@@ -975,84 +993,101 @@ const renderCharts=(habit)=>{
   const atGrad=atCtx.createLinearGradient(0,0,0,200);
   atGrad.addColorStop(0,'rgba(52,211,153,0.35)');atGrad.addColorStop(1,'rgba(52,211,153,0)');
   state.charts.at=new Chart(atCtx,{type:'line',data:{labels:allTime.length?allTime.map(d=>DateUtils.formatShort(d.date)):['–'],datasets:[{data:allTime.length?allTime.map(d=>d.total):[0],borderColor:C.green,backgroundColor:atGrad,borderWidth:2.5,tension:0.4,fill:true,pointRadius:allTime.length>30?0:3,pointBackgroundColor:C.green}]},options:{responsive:true,plugins:{legend:{display:false}},scales:baseScales(),animation:{duration:800}}});
-
-  // Priority chart
-  const priorityData = HabitLogic.getPriorityChartData(habit);
-  const pChartEmpty = document.getElementById('priorityChartEmpty');
-  const pChartCanvas = document.getElementById('priorityChart');
-  if (!priorityData.length) {
-    pChartCanvas.style.display = 'none';
-    pChartEmpty.style.display = 'block';
-  } else {
-    pChartCanvas.style.display = '';
-    pChartEmpty.style.display = 'none';
-    const pCtx = pChartCanvas.getContext('2d');
-    state.charts.priority = new Chart(pCtx, {
-      type: 'bar',
-      data: {
-        labels: priorityData.map(d => DateUtils.formatShort(d.date)),
-        datasets: [
-          {
-            label: 'Priority day',
-            data: priorityData.map(() => 1),
-            backgroundColor: priorityData.map(d => d.completed ? 'rgba(52,211,153,0.75)' : 'rgba(251,113,133,0.65)'),
-            borderRadius: 6,
-            borderSkipped: false,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const d = priorityData[ctx.dataIndex];
-                return d.completed ? '✅ Completed on priority day' : '❌ Missed on priority day';
-              }
-            }
-          }
-        },
-        scales: {
-          x: { grid: { color: C.grid }, ticks: { color: C.text, font: { family: 'DM Sans', size: 11 } } },
-          y: { display: false, max: 1.5 }
-        },
-        animation: { duration: 700 }
-      }
-    });
-  }
 };
 
-const renderHeatmap=(last30)=>{
-  const canvas=$('heatmapCanvas');if(!canvas)return;
-  const dpr=window.devicePixelRatio||1,COLS=10,ROWS=3;
-  const cell=Math.floor((canvas.parentElement.clientWidth-32-(COLS-1)*4)/COLS),gap=4;
-  const W=COLS*(cell+gap)-gap,H=ROWS*(cell+gap)-gap;
-  canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
-  const maxCount=Math.max(...last30.map(d=>d.count),1);
+const renderActivityCalendar = (habit) => {
+  const cal = $('activityCalendar');
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const monthName = now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
 
-  // Safe rounded rect — fallback for browsers without roundRect support
-  const roundRect = (x,y,w,h,r) => {
-    if(ctx.roundRect) { ctx.roundRect(x,y,w,h,r); return; }
-    ctx.moveTo(x+r,y);
-    ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
-    ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
-    ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
-    ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
-    ctx.closePath();
-  };
+  // Build completion lookup
+  const done = new Set(habit.completions.filter(c=>c.count>0).map(c=>c.date));
+  const today = DateUtils.today();
 
-  last30.forEach((d,i)=>{
-    const col=i%COLS,row=Math.floor(i/COLS),x=col*(cell+gap),y=row*(cell+gap);
-    ctx.fillStyle='rgba(255,255,255,0.04)';ctx.beginPath();roundRect(x,y,cell,cell,4);ctx.fill();
-    if(d.count>0){
-      const intensity=d.count/maxCount;
-      ctx.fillStyle=`rgba(124,107,255,${0.2+intensity*0.8})`;ctx.beginPath();roundRect(x,y,cell,cell,4);ctx.fill();
-      if(intensity>0.5){ctx.fillStyle=`rgba(192,132,252,${intensity*0.5})`;ctx.beginPath();roundRect(x+2,y+2,cell-4,cell-4,3);ctx.fill();}
-    }
-  });
+  let html = `<div class="cal-month-title">${monthName}</div>`;
+  html += `<div class="cal-grid">`;
+  // Day headers
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => { html += `<div class="cal-header">${d}</div>`; });
+  // Empty cells before first day
+  for(let i=0;i<firstDay;i++) html += `<div class="cal-cell cal-empty"></div>`;
+  // Day cells
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === today;
+    const isDone  = done.has(dateStr);
+    const isFuture = dateStr > today;
+    html += `<div class="cal-cell ${isDone?'cal-done':''} ${isToday?'cal-today':''} ${isFuture?'cal-future':''}">
+      <span>${d}</span>${isDone?'<div class="cal-dot"></div>':''}
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Legend
+  html += `<div class="cal-legend">
+    <span class="cal-legend-item"><span class="cal-dot-ex done"></span> Completed</span>
+    <span class="cal-legend-item"><span class="cal-dot-ex today"></span> Today</span>
+    <span class="cal-legend-item"><span class="cal-dot-ex missed"></span> Missed</span>
+  </div>`;
+  cal.innerHTML = html;
+};
+
+const renderGoalPace = (habit) => {
+  const s = HabitLogic.computeStats(habit);
+  const el = $('goalPaceCard');
+  const daysSinceStart = s.totalDays;
+  const val = s.msValue; // completions or active days
+  const goal = habit.goal;
+
+  if(val >= goal){
+    el.innerHTML = `<div class="pace-complete">🏆 Goal reached! You hit ${goal} ${s.isMSDaily?'days':'completions'}.</div>`;
+    return;
+  }
+
+  // Current pace (per day)
+  const pace = daysSinceStart > 0 ? val / daysSinceStart : 0;
+  // Days needed at current pace
+  const remaining = goal - val;
+  const daysNeeded = pace > 0 ? Math.ceil(remaining / pace) : null;
+  const eta = daysNeeded ? new Date(Date.now() + daysNeeded*86400000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
+
+  // Required pace to finish in same time as started (mirror symmetry)
+  const totalProjected = daysSinceStart * 2; // simple projection
+  const requiredPace = totalProjected > 0 ? (remaining / Math.max(daysSinceStart,1)).toFixed(2) : null;
+
+  // Progress pct
+  const pct = Math.min(Math.round((val/goal)*100),100);
+
+  // Status colour
+  const onTrack = pace >= (goal / Math.max(daysSinceStart*2,1));
+
+  el.innerHTML = `
+    <div class="pace-stats">
+      <div class="pace-stat">
+        <div class="pace-stat__val">${val} <span>/ ${goal}</span></div>
+        <div class="pace-stat__label">${s.isMSDaily?'Days logged':'Total completions'}</div>
+      </div>
+      <div class="pace-stat">
+        <div class="pace-stat__val ${onTrack?'on-track':'off-track'}">${pace.toFixed(2)}</div>
+        <div class="pace-stat__label">Current pace / day</div>
+      </div>
+      <div class="pace-stat">
+        <div class="pace-stat__val">${eta || '—'}</div>
+        <div class="pace-stat__label">Estimated finish</div>
+      </div>
+    </div>
+    <div class="pace-bar-wrap">
+      <div class="pace-bar"><div class="pace-fill ${onTrack?'on-track':'off-track'}" style="width:${pct}%"></div></div>
+      <span class="pace-pct">${pct}%</span>
+    </div>
+    <div class="pace-message ${onTrack?'pace-good':'pace-warn'}">
+      ${onTrack
+        ? `✅ You're on track — ${remaining} ${s.isMSDaily?'days':'completions'} to go`
+        : `⚠️ Behind pace — need to pick up the rate to hit your goal`}
+    </div>
+  `;
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -1064,12 +1099,14 @@ const switchView=(view)=>{
   $('habitsView').classList.toggle('hidden',view!=='habits');
   $('tasksView').classList.toggle('hidden',view!=='tasks');
   $('dashboardView').classList.toggle('hidden',view!=='dashboard');
+  $('journalView').classList.toggle('hidden',view!=='journal');
   document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  const titles = { habits:"Today's Habits", tasks:"Tasks", dashboard:"Dashboard" };
+  const titles = { habits:"Today's Habits", tasks:"Tasks", dashboard:"Dashboard", journal:"Journal" };
   $('topbarTitle').textContent = titles[view] || '';
   $('addHabitBtn').hidden = view !== 'habits';
   if(view==='dashboard') renderDashboard();
   if(view==='tasks') renderTasksView();
+  if(view==='journal') renderJournalView();
   closeSidebar();
 };
 
@@ -1460,6 +1497,80 @@ const processDueTasks = async () => {
 };
 
 /* ═══════════════════════════════════════════════════════════
+   JOURNAL
+═══════════════════════════════════════════════════════════ */
+let journalSyncTimeout = null;
+const saveJournal = async () => {
+  saveLocalJournal(state.journal);
+  if(state.user && !state.isOfflineMode){
+    clearTimeout(journalSyncTimeout);
+    journalSyncTimeout = setTimeout(async () => {
+      await saveJournalToCloud(state.user.uid, state.journal);
+    }, 1000);
+  }
+};
+
+const renderJournalView = () => {
+  const entries = [...state.journal].sort((a,b) => b.createdAt - a.createdAt);
+  const container = $('journalEntries');
+  const empty = $('journalEmpty');
+
+  // Update compose date
+  $('journalComposeDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+
+  if(!entries.length){
+    container.innerHTML = '';
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+
+  container.innerHTML = entries.map(e => {
+    const d = new Date(e.createdAt);
+    const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+    const timeStr = d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const preview = e.body.length > 120 ? e.body.slice(0,120)+'…' : e.body;
+    return `<div class="journal-card" data-id="${e.id}">
+      <div class="journal-card-header">
+        <span class="journal-card-title">${e.title ? esc(e.title) : '<em>Untitled</em>'}</span>
+        <span class="journal-card-date">${dateStr} · ${timeStr}</span>
+      </div>
+      <div class="journal-card-preview">${esc(preview)}</div>
+    </div>`;
+  }).join('');
+};
+
+const openJournalEntry = (id) => {
+  const e = state.journal.find(j => j.id === id); if(!e) return;
+  state.viewingJournalId = id;
+  const d = new Date(e.createdAt);
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const timeStr = d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  $('journalEntryModalTitle').textContent = e.title || 'Journal Entry';
+  $('journalEntryMeta').textContent = `${dateStr} · ${timeStr}`;
+  $('journalEntryBody').textContent = e.body;
+  showModal('journalEntryModal');
+};
+
+const saveJournalEntry = async () => {
+  const title = $('journalTitleInput').value.trim();
+  const body  = $('journalBodyInput').value.trim();
+  if(!body){ $('journalBodyInput').classList.add('error'); setTimeout(()=>$('journalBodyInput').classList.remove('error'),800); return; }
+  state.journal.push({ id: genId(), title, body, createdAt: Date.now() });
+  $('journalTitleInput').value = '';
+  $('journalBodyInput').value = '';
+  await saveJournal();
+  renderJournalView();
+};
+
+const deleteJournalEntry = async () => {
+  state.journal = state.journal.filter(j => j.id !== state.viewingJournalId);
+  hideModal('journalEntryModal');
+  await saveJournal();
+  renderJournalView();
+};
+
+/* ═══════════════════════════════════════════════════════════
    APP UI INIT
 ═══════════════════════════════════════════════════════════ */
 let appUIInited=false;
@@ -1520,6 +1631,17 @@ const initAppUI=()=>{
       if (delBtn) { openDeleteTaskModal(delBtn.dataset.id); return; }
     });
   });
+
+  // Journal
+  $('saveJournalBtn').addEventListener('click', saveJournalEntry);
+  $('journalBodyInput').addEventListener('keydown', e => { if(e.key==='Enter' && e.ctrlKey) saveJournalEntry(); });
+  $('journalEntries').addEventListener('click', e => {
+    const card = e.target.closest('.journal-card');
+    if(card) openJournalEntry(card.dataset.id);
+  });
+  $('journalEntryModalClose').addEventListener('click', () => hideModal('journalEntryModal'));
+  $('journalEntryModalClose2').addEventListener('click', () => hideModal('journalEntryModal'));
+  $('journalDeleteBtn').addEventListener('click', deleteJournalEntry);
 
   $('taskHistoryBtn').addEventListener('click', openTaskHistory);
   $('taskHistoryModalClose').addEventListener('click', () => hideModal('taskHistoryModal'));
