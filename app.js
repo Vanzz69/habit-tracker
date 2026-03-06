@@ -469,7 +469,7 @@ const $=(id)=>document.getElementById(id);
 const esc=(s)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const showModal=(id)=>{$(id).hidden=false;$('modalBackdrop').hidden=false;};
 const hideModal=(id)=>{$(id).hidden=true;$('modalBackdrop').hidden=true;};
-const hideAllModals=()=>{['habitModal','deleteModal','deleteTaskModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
+const hideAllModals=()=>{['habitModal','deleteModal','deleteTaskModal','taskHistoryModal'].forEach(id=>$(id).hidden=true);$('modalBackdrop').hidden=true;};
 
 /* ═══════════════════════════════════════════════════════════
    PRIORITY CONTEXT MENU
@@ -573,13 +573,15 @@ const openPriorityMenu = (habitId, anchorEl) => {
   }, 10);
 };
 
-// Long press detection — works on both touch and mouse
+// Long press — touch only on card body (not handle), mouse on desktop
 const addLongPress = (el, habitId, callback) => {
   let timer = null;
   let startX = 0, startY = 0;
-  const MOVE_THRESHOLD = 8;
+  const THRESHOLD = 8;
 
   const start = (e) => {
+    // Don't trigger if touch started on the drag handle
+    if (e.target.closest('.drag-handle')) return;
     const touch = e.touches ? e.touches[0] : e;
     startX = touch.clientX; startY = touch.clientY;
     el.classList.add('long-press-hold');
@@ -598,18 +600,68 @@ const addLongPress = (el, habitId, callback) => {
     const touch = e.touches ? e.touches[0] : e;
     const dx = Math.abs(touch.clientX - startX);
     const dy = Math.abs(touch.clientY - startY);
-    if (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) cancel();
+    if (dx > THRESHOLD || dy > THRESHOLD) cancel();
   };
 
   el.addEventListener('touchstart', start, { passive: true });
   el.addEventListener('touchend', cancel);
   el.addEventListener('touchmove', move, { passive: true });
+  // Desktop: mouse long press + right click
   el.addEventListener('mousedown', start);
   el.addEventListener('mouseup', cancel);
   el.addEventListener('mousemove', move);
-  // Cancel immediately when drag begins
-  el.addEventListener('dragstart', cancel);
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); cancel(); callback(habitId, el); });
+};
+
+// Touch drag-to-reorder via handle — works on both mobile and desktop
+const addTouchDrag = (card, handle, index, onDrop) => {
+  let dragging = false;
+  let clone = null;
+  let startY = 0;
+  let lastOver = null;
+
+  handle.addEventListener('touchstart', (e) => {
+    e.stopPropagation(); // don't trigger card long press
+    dragging = true;
+    startY = e.touches[0].clientY;
+    card.classList.add('dragging');
+
+    // Ghost clone
+    clone = card.cloneNode(true);
+    clone.style.cssText = `position:fixed;left:${card.getBoundingClientRect().left}px;top:${card.getBoundingClientRect().top}px;width:${card.offsetWidth}px;opacity:0.7;pointer-events:none;z-index:9999;transition:none;`;
+    document.body.appendChild(clone);
+  }, { passive: true });
+
+  handle.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    if (clone) clone.style.top = (touch.clientY - 30) + 'px';
+
+    // Find which card we're hovering over
+    clone.style.display = 'none';
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    clone.style.display = '';
+    const overCard = el && el.closest('.habit-card');
+    if (overCard && overCard !== card) {
+      if (lastOver && lastOver !== overCard) lastOver.classList.remove('drag-over');
+      overCard.classList.add('drag-over');
+      lastOver = overCard;
+    }
+  }, { passive: false });
+
+  handle.addEventListener('touchend', async () => {
+    if (!dragging) return;
+    dragging = false;
+    card.classList.remove('dragging');
+    if (clone) { clone.remove(); clone = null; }
+    if (lastOver) {
+      const targetIndex = parseInt(lastOver.dataset.index);
+      lastOver.classList.remove('drag-over');
+      lastOver = null;
+      if (targetIndex !== index) await onDrop(index, targetIndex);
+    }
+  });
 };
 
 /* ═══════════════════════════════════════════════════════════
@@ -645,11 +697,13 @@ const renderHabitCard = (habit, index) => {
     ? `<span class="priority-badge priority-badge--tomorrow">🌅 Tomorrow</span>`
     : '';
 
+  const isMobile = 'ontouchstart' in window;
   const card=document.createElement('article');
   card.className=`habit-card${hasToday?' completed-today':''}${isPriority?' priority-active':''}`;
   card.dataset.id=habit.id;
   card.dataset.index=index;
-  card.draggable=true;
+  // Only set draggable on desktop — on mobile we use touch drag via handle
+  if (!isMobile) card.draggable=true;
 
   card.innerHTML=`
     <div class="drag-handle" title="Drag to reorder">⠿</div>
@@ -682,29 +736,39 @@ const renderHabitCard = (habit, index) => {
       </div>
     </div>`;
 
-  // Long press → priority menu
+  // Long press on card body → priority menu
   addLongPress(card, habit.id, openPriorityMenu);
 
-  // Drag events
-  card.addEventListener('dragstart', (e) => {
-    state.dragSrcIndex = index;
-    card.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-  card.addEventListener('dragend', () => card.classList.remove('dragging'));
-  card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drag-over'); });
-  card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-  card.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    card.classList.remove('drag-over');
-    const targetIndex = parseInt(card.dataset.index);
-    if(state.dragSrcIndex === null || state.dragSrcIndex === targetIndex) return;
-    const moved = state.habits.splice(state.dragSrcIndex, 1)[0];
-    state.habits.splice(targetIndex, 0, moved);
-    state.dragSrcIndex = null;
-    await saveHabits();
-    renderHabitsView();
-  });
+  const handle = card.querySelector('.drag-handle');
+
+  // Desktop: HTML5 drag on whole card
+  if (!isMobile) {
+    card.addEventListener('dragstart', (e) => {
+      state.dragSrcIndex = index;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const targetIndex = parseInt(card.dataset.index);
+      if(state.dragSrcIndex === null || state.dragSrcIndex === targetIndex) return;
+      const moved = state.habits.splice(state.dragSrcIndex, 1)[0];
+      state.habits.splice(targetIndex, 0, moved);
+      state.dragSrcIndex = null;
+      await saveHabits(); renderHabitsView();
+    });
+  } else {
+    // Mobile: touch drag via handle only
+    addTouchDrag(card, handle, index, async (fromIdx, toIdx) => {
+      const moved = state.habits.splice(fromIdx, 1)[0];
+      state.habits.splice(toIdx, 0, moved);
+      await saveHabits(); renderHabitsView();
+    });
+  }
 
   return card;
 };
@@ -772,34 +836,45 @@ const milestoneBadge=(n,isDaily=false)=>{
   return n<=10?'🌱':n<=25?'⭐':n<=50?'🔥':n<=100?'💎':n<=250?'🏆':n<=500?'👑':'🌟';
 };
 
-// Returns which of 5 journey stages the user is at, and progress within it
-const getMilestoneJourney = (s) => {
-  const milestones = s.isMSDaily
-    ? [7, 21, 45, 90, 180]   // 5 daily milestones = journey complete
-    : [10, 25, 50, 100, 250]; // 5 flexible milestones
+// Returns which of 5 journey stages the user is at, based on habit's own goal
+const getMilestoneJourney = (s, habit) => {
+  const goal = habit.goal;
+  // 5 evenly spaced milestones: 1/5, 2/5, 3/5, 4/5, 5/5 of goal
+  const step = Math.max(1, Math.round(goal / 5));
+  const milestones = [
+    Math.round(step),
+    Math.round(step * 2),
+    Math.round(step * 3),
+    Math.round(step * 4),
+    goal,
+  ];
+  // For daily habits use active days, for flexible use total completions
   const val = s.msValue;
-  const total = milestones[4]; // 5th = "habit completed"
 
-  // Which stage are we in (0-indexed)
+  // Which stage are we at (how many milestones passed)
   let stage = 0;
   for (let i = 0; i < milestones.length; i++) {
     if (val >= milestones[i]) stage = i + 1;
   }
   stage = Math.min(stage, 5);
 
-  // Progress within current stage
+  // Progress within current stage (for the mini bar)
   const stageStart = stage === 0 ? 0 : milestones[stage - 1];
-  const stageEnd   = stage < 5 ? milestones[stage] : milestones[4];
+  const stageEnd   = milestones[Math.min(stage, 4)];
   const stagePct   = stageEnd === stageStart ? 100
-    : Math.round(((val - stageStart) / (stageEnd - stageStart)) * 100);
+    : Math.max(0, Math.min(100, Math.round(((val - stageStart) / (stageEnd - stageStart)) * 100)));
 
-  const labels = ['🌱 Beginning', '⭐ Building', '🔥 Committed', '💎 Dedicated', '🏆 Mastered'];
-  const nextLabel = stage < 5 ? `${milestones[stage]} ${s.isMSDaily?'days':'logs'}` : 'Complete!';
+  const emojis  = ['🌱', '⭐', '🔥', '💎', '🏆'];
+  const labels  = ['Beginning', 'Building', 'Committed', 'Dedicated', 'Mastered'];
+  const unit    = s.isMSDaily ? 'days' : 'logs';
+  const nextLabel = stage < 5 ? `${milestones[stage]} ${unit}` : 'Goal reached!';
 
-  return { stage, stagePct: Math.max(0, Math.min(100, stagePct)),
-    stageLabel: labels[Math.max(0, stage - (stage===5?0:0))],
-    milestones, val, nextLabel,
-    currentLabel: labels[Math.max(0, Math.min(stage, 4))] };
+  return {
+    stage, stagePct, milestones, val, unit,
+    emoji: emojis[Math.min(Math.max(stage - 1, 0), 4)],
+    label: labels[Math.min(Math.max(stage - 1, 0), 4)],
+    nextLabel,
+  };
 };
 
 const renderDashboardStats = () => {
@@ -818,12 +893,13 @@ const renderDashboardStats = () => {
   $('dashboardEmpty').style.display='none';
   $('dashboardContent').style.display='';
 
-  const journey = getMilestoneJourney(s);
+  const journey = getMilestoneJourney(s, habit);
   const journeyDots = Array.from({length:5}, (_,i) => {
     const filled = i < journey.stage;
-    const active = i === journey.stage - 1 || (journey.stage === 0 && i === 0);
-    return `<div class="journey-dot ${filled?'filled':''} ${active?'active':''}" title="${journey.milestones[i]} ${s.isMSDaily?'days':'logs'}">
-      <span>${i+1}</span>
+    const active = i === journey.stage - 1;
+    const emojis = ['🌱','⭐','🔥','💎','🏆'];
+    return `<div class="journey-dot ${filled?'filled':''} ${active?'active':''}" title="${journey.milestones[i]} ${journey.unit}">
+      <span>${filled ? emojis[i] : i+1}</span>
     </div>`;
   }).join('<div class="journey-line"></div>');
 
@@ -836,11 +912,13 @@ const renderDashboardStats = () => {
             <span class="fraction-current">${journey.stage}</span>
             <span class="fraction-sep">/</span>
             <span class="fraction-total">5</span>
-            <span class="fraction-label">${journey.currentLabel}</span>
+            <span class="fraction-label">${journey.emoji} ${journey.label}</span>
           </div>
           <div class="milestone-sub">
-            ${s.isMSDaily?`<strong>${s.msValue} days</strong> logged`:`<strong>${s.msValue} logs</strong> total`}
-            ${journey.stage < 5 ? `· <span class="milestone-next">${journey.nextLabel} to next milestone</span>` : ' · <span class="milestone-next" style="color:var(--green)">Habit mastered! 🏆</span>'}
+            <strong>${journey.val}</strong> / ${habit.goal} ${journey.unit}
+            ${journey.stage < 5
+              ? ` · <span class="milestone-next">${journey.milestones[journey.stage] - journey.val} more to next</span>`
+              : ' · <span class="milestone-next" style="color:var(--green)">Goal reached! 🏆</span>'}
           </div>
         </div>
       </div>
@@ -850,7 +928,7 @@ const renderDashboardStats = () => {
         <span class="milestone-pct">${journey.stagePct}%</span>
       </div>
       <div class="milestone-labels">
-        <span>${journey.stage > 0 ? journey.milestones[journey.stage-1] : 0} ${s.isMSDaily?'days':'logs'}</span>
+        <span>${journey.stage > 0 ? journey.milestones[journey.stage-1] : 0} ${journey.unit}</span>
         <span>${journey.nextLabel}</span>
       </div>
     </div>
@@ -1276,6 +1354,54 @@ const buildTaskCard = (task, index, pane) => {
 };
 
 /* ═══════════════════════════════════════════════════════════
+   TASK HISTORY
+═══════════════════════════════════════════════════════════ */
+const openTaskHistory = () => {
+  const list = $('taskHistoryList');
+  list.innerHTML = '';
+
+  // Build last 30 days
+  const days = Array.from({length:30}, (_,i) => DateUtils.daysAgo(29 - i));
+  const today = DateUtils.today();
+
+  // Gather tasks that fall within last 30 days (completed today or past, or scheduled for past dates)
+  const relevant = state.tasks.filter(t => t.date >= days[0] && t.date <= today);
+
+  if (!relevant.length) {
+    list.innerHTML = '<p class="history-empty">No task history yet.</p>';
+  } else {
+    // Group by date descending (most recent first)
+    const grouped = {};
+    relevant.forEach(t => {
+      if (!grouped[t.date]) grouped[t.date] = [];
+      grouped[t.date].push(t);
+    });
+
+    Object.keys(grouped).sort().reverse().forEach(date => {
+      const header = document.createElement('div');
+      header.className = 'history-date-header';
+      const d = new Date(date + 'T00:00:00');
+      const isToday = date === today;
+      header.textContent = isToday ? 'Today' : d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+      list.appendChild(header);
+
+      grouped[date].forEach(t => {
+        const row = document.createElement('div');
+        row.className = `history-task-row ${t.completed ? 'history-done' : 'history-missed'}`;
+        row.innerHTML = `
+          <span class="history-status">${t.completed ? '✓' : '○'}</span>
+          <span class="history-title">${esc(t.title)}</span>
+          ${t.time ? `<span class="history-time">${fmt12(t.time)}</span>` : ''}
+        `;
+        list.appendChild(row);
+      });
+    });
+  }
+
+  showModal('taskHistoryModal');
+};
+
+/* ═══════════════════════════════════════════════════════════
    TASK ACTIONS
 ═══════════════════════════════════════════════════════════ */
 const addTodayTask = async () => {
@@ -1400,6 +1526,9 @@ const initAppUI=()=>{
       if (delBtn) { openDeleteTaskModal(delBtn.dataset.id); return; }
     });
   });
+
+  $('taskHistoryBtn').addEventListener('click', openTaskHistory);
+  $('taskHistoryModalClose').addEventListener('click', () => hideModal('taskHistoryModal'));
 
   // Delete task modal
   $('deleteTaskConfirmBtn').addEventListener('click', confirmDeleteTask);
