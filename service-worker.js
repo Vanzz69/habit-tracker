@@ -5,8 +5,8 @@
  * This ensures phones always get the latest code after a deploy.
  */
 
-const CACHE_NAME    = 'momentum-v4.0.0';
-const RUNTIME_CACHE = 'momentum-runtime-v4';
+const CACHE_NAME    = 'momentum-v5.0.0';
+const RUNTIME_CACHE = 'momentum-runtime-v5';
 
 const CDN_HOSTS = [
   'fonts.googleapis.com',
