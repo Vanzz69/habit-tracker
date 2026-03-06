@@ -153,6 +153,9 @@
         <button class="nav-item" data-view="tasks">
           <span class="nav-icon">☑</span><span>Tasks</span>
         </button>
+        <button class="nav-item" data-view="journal">
+          <span class="nav-icon">📓</span><span>Journal</span>
+        </button>
         <button class="nav-item" data-view="dashboard">
           <span class="nav-icon">◎</span><span>Dashboard</span>
         </button>
@@ -212,21 +215,17 @@
         <div class="dashboard-content" id="dashboardContent" style="display:none">
           <div class="stats-grid" id="statsGrid"></div>
           <div class="chart-card chart-card--full">
-            <h3 class="chart-title">30-Day Activity Heatmap</h3>
-            <div class="heatmap-wrap"><canvas id="heatmapCanvas"></canvas></div>
-            <div class="heatmap-legend">
-              <span>Less</span>
-              <span class="legend-dot ld-0"></span><span class="legend-dot ld-1"></span>
-              <span class="legend-dot ld-2"></span><span class="legend-dot ld-3"></span>
-              <span class="legend-dot ld-4"></span>
-              <span>More</span>
-            </div>
+            <h3 class="chart-title">📅 Monthly Activity Calendar</h3>
+            <div id="activityCalendar" class="activity-calendar"></div>
           </div>
           <div class="charts-grid">
             <div class="chart-card"><h3 class="chart-title">Success Rate — Last 14 Days</h3><canvas id="successRateChart"></canvas></div>
             <div class="chart-card"><h3 class="chart-title">Weekly Comparison</h3><canvas id="weekCompChart"></canvas></div>
             <div class="chart-card chart-card--wide"><h3 class="chart-title">All-Time Trend</h3><canvas id="allTimeTrendChart"></canvas></div>
-            <div class="chart-card chart-card--wide"><h3 class="chart-title">⚡ Priority Days — Did You Follow Through?</h3><canvas id="priorityChart"></canvas><p class="priority-chart-empty" id="priorityChartEmpty" style="display:none">No priority days logged yet. Long-press a habit to mark it as priority.</p></div>
+            <div class="chart-card chart-card--wide">
+              <h3 class="chart-title">🎯 Goal Pace Tracker</h3>
+              <div id="goalPaceCard" class="goal-pace-wrap"></div>
+            </div>
           </div>
         </div>
         <!-- Empty dashboard state -->
@@ -293,6 +292,24 @@
 
       </section>
 
+      <!-- JOURNAL VIEW -->
+      <section class="view hidden" id="journalView">
+        <div class="journal-compose">
+          <input type="text" id="journalTitleInput" placeholder="Title (optional)" maxlength="100" autocomplete="off" class="journal-title-input" />
+          <textarea id="journalBodyInput" placeholder="Write your thoughts, wins, reflections…" class="journal-body-input" rows="5"></textarea>
+          <div class="journal-compose-footer">
+            <span class="journal-compose-date" id="journalComposeDate"></span>
+            <button class="btn-primary" id="saveJournalBtn">Save Entry</button>
+          </div>
+        </div>
+        <div class="journal-entries" id="journalEntries"></div>
+        <div class="empty-state" id="journalEmpty" style="display:none">
+          <div class="empty-icon" style="-webkit-text-fill-color:initial;background:none;font-size:2.5rem;">📓</div>
+          <h2>Your journal is empty</h2>
+          <p>Write your first entry above — wins, thoughts, anything on your mind.</p>
+        </div>
+      </section>
+
       <!-- BOTTOM NAV (mobile) -->
       <nav class="bottom-nav" id="bottomNav">
         <button class="bottom-nav-item active" data-view="habits">
@@ -302,6 +319,10 @@
         <button class="bottom-nav-item" data-view="tasks">
           <span class="bottom-nav-icon">☑</span>
           <span class="bottom-nav-label">Tasks</span>
+        </button>
+        <button class="bottom-nav-item" data-view="journal">
+          <span class="bottom-nav-icon">📓</span>
+          <span class="bottom-nav-label">Journal</span>
         </button>
         <button class="bottom-nav-item" data-view="dashboard">
           <span class="bottom-nav-icon">◎</span>
@@ -390,9 +411,24 @@
     </div>
   </div>
 
+  <div class="modal modal--journal" id="journalEntryModal" hidden role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h2 id="journalEntryModalTitle">Journal Entry</h2>
+      <button class="modal-close" id="journalEntryModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="journal-entry-meta" id="journalEntryMeta"></div>
+      <div class="journal-entry-body" id="journalEntryBody"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="journalDeleteBtn">Delete</button>
+      <button class="btn-ghost" id="journalEntryModalClose2">Close</button>
+    </div>
+  </div>
+
   <div class="sync-toast" id="syncToast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="app.js?v=8" type="module"></script>
+  <script src="app.js?v=9" type="module"></script>
 </body>
 </html>
