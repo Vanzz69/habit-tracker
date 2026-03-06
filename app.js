@@ -9,7 +9,6 @@ import {
   signInWithGoogle, signInWithEmail, signUpWithEmail, resetPassword, logOut,
   saveHabitsToCloud, loadHabitsFromCloud, subscribeToHabits,
   saveTasksToCloud, loadTasksFromCloud,
-  checkRedirectResult,
 } from './firebase.js';
 
 /* ═══════════════════════════════════════════════════════════
@@ -301,22 +300,17 @@ const initAuthEvents = () => {
   document.getElementById('goToLoginFromForgot').addEventListener('click',()=>showScreen('loginScreen'));
 
   const handleGoogle = async (errorId) => {
-    document.getElementById(errorId).textContent='';
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const errEl = document.getElementById(errorId);
+    errEl.textContent = '';
     try {
-      if (isMobile) {
-        // Show loading — page will redirect, onAuthStateChanged handles result
-        document.getElementById(errorId).textContent='';
-        const btn = errorId === 'loginError'
-          ? document.getElementById('googleSignInBtn')
-          : document.getElementById('googleSignUpBtn');
-        btn.textContent = 'Redirecting…'; btn.disabled = true;
-      }
       await signInWithGoogle();
     } catch(e) {
-      document.getElementById(errorId).textContent = e.code === 'auth/popup-blocked'
-        ? 'Popup blocked. Try again or use email sign-in.'
-        : 'Google sign-in failed. Try again.';
+      errEl.textContent =
+        e.code === 'auth/popup-blocked'           ? 'Popup blocked — please allow popups for this site.' :
+        e.code === 'auth/cancelled-popup-request' ? '' :
+        e.code === 'auth/popup-closed-by-user'    ? '' :
+        e.code === 'auth/unauthorized-domain'     ? 'Domain not authorized. Check Firebase settings.' :
+        `Sign-in failed: ${e.code || e.message}`;
     }
   };
   document.getElementById('googleSignInBtn').addEventListener('click',()=>handleGoogle('loginError'));
@@ -1553,17 +1547,10 @@ const initAppUI=()=>{
 /* ═══════════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════════ */
-const init=()=>{
+const init = () => {
   initAuthEvents();
 
-  // Handle mobile Google redirect result (page reloads after Google OAuth)
-  checkRedirectResult().then(result => {
-    if (result && result.user) {
-      // Auth state change will fire automatically — nothing extra needed
-    }
-  }).catch(() => {});
-
-  // Safety timeout — if Firebase auth hasn't responded in 8s, show login
+  // Safety net — if Firebase doesn't respond in 8s, show login
   const authTimeout = setTimeout(() => {
     document.getElementById('globalLoader').classList.add('hidden');
     showScreen('loginScreen');
@@ -1574,8 +1561,8 @@ const init=()=>{
     handleAuthStateChange(user);
   });
 
-  if('serviceWorker' in navigator)
-    window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js').catch(()=>{}));
+  if ('serviceWorker' in navigator)
+    window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
 };
 
 document.addEventListener('DOMContentLoaded',init);
