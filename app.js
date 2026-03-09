@@ -1486,7 +1486,9 @@ const addSomedayTask = async () => {
 /* ═══════════════════════════════════════════════════════════
    DONATION MODAL
 ═══════════════════════════════════════════════════════════ */
-const openDonateModal = () => showModal('donateModal');
+const openDonateModal = () => { showModal('donateModal'); showDonateMain(); };
+const showDonateMain = () => { $('donateMainView').style.display=''; $('donateUpiView').style.display='none'; };
+const showDonateUPI  = () => { $('donateMainView').style.display='none'; $('donateUpiView').style.display=''; };
 
 /* ═══════════════════════════════════════════════════════════
    PWA INSTALL BANNER
@@ -1768,12 +1770,14 @@ const initAppUI=()=>{
 
   // Donate modal
   $('openDonateBtn').addEventListener('click', () => { openDonateModal(); closeSidebar(); });
-  $('donateModalClose').addEventListener('click', () => hideModal('donateModal'));
-  // Onboarding UPI button → open donate modal
+  $('donateModalClose').addEventListener('click', () => { hideModal('donateModal'); showDonateMain(); });
+  // Onboarding UPI button → open donate modal on UPI view
   const obUpiBtn = document.getElementById('obUpiBtn');
-  if(obUpiBtn) obUpiBtn.addEventListener('click', () => openDonateModal());
+  if(obUpiBtn) obUpiBtn.addEventListener('click', () => { openDonateModal(); showDonateUPI(); });
+  $('openUpiViewBtn').addEventListener('click', showDonateUPI);
+  $('donateBackBtn').addEventListener('click', showDonateMain);
   $('copyUpiBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText('vanshnarayantiwari5@okicici').then(() => {
+    navigator.clipboard.writeText('vanzz-momentum@ibl').then(() => {
       $('copyUpiBtn').textContent = 'Copied! ✓';
       setTimeout(() => $('copyUpiBtn').textContent = 'Copy', 2000);
     }).catch(() => {
