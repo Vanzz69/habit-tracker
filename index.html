@@ -28,7 +28,8 @@
   <!-- ═══════ ONBOARDING ═══════ -->
   <div id="onboarding" class="onboarding hidden">
     <div class="onboarding-card">
-      <div class="onboarding-steps">
+      <div class="onboarding-body">
+        <div class="onboarding-steps">
         <div class="onboarding-step active" data-step="0">
           <div class="onboarding-emoji">◈</div>
           <h2>Welcome to Momentum</h2>
@@ -61,7 +62,7 @@
           <p class="ob-install-note">Launches full screen, works offline, just like a native app.</p>
         </div>
         <div class="onboarding-step" data-step="4" id="obStepAndroid">
-          <div class="onboarding-emoji">📱</div>
+          <div class="onboarding-emoji">⬇</div>
           <h2>Install on Your Phone</h2>
           <p>Momentum works best installed as an app. To install:</p>
           <ol class="ob-install-steps">
@@ -94,6 +95,7 @@
         <span class="ob-dot" data-dot="4"></span>
         <span class="ob-dot" data-dot="5"></span>
       </div>
+      </div> <!-- end onboarding-body -->
       <div class="onboarding-footer">
         <button class="btn-ghost" id="obSkipBtn">Skip</button>
         <button class="btn-primary" id="obNextBtn">Next</button>
@@ -508,47 +510,56 @@
       <h2>Support Momentum</h2>
       <button class="modal-close" id="donateModalClose">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body modal-body--scroll">
       <p class="donate-intro">Momentum is free and always will be. Firebase — which syncs your data across devices — has real costs. If it's helped you, a small contribution keeps it running. 🙏</p>
-      <div class="donate-options">
 
-        <!-- UPI -->
-        <div class="donate-option">
-          <div class="donate-option-title">Pay via UPI</div>
-          <div class="donate-option-sub">Open your preferred app directly</div>
-          <div class="upi-app-btns">
-            <a class="upi-app-btn" href="tez://upi/pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
-              <span class="upi-app-icon" style="background:#1a73e8">G</span>
-              <span>GPay</span>
-            </a>
-            <a class="upi-app-btn" href="phonepe://pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
-              <span class="upi-app-icon" style="background:#5f259f">Pe</span>
-              <span>PhonePe</span>
-            </a>
-            <a class="upi-app-btn" href="paytmmp://pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
-              <span class="upi-app-icon" style="background:#00b9f1">Pt</span>
-              <span>Paytm</span>
-            </a>
+      <!-- Main options view -->
+      <div id="donateMainView" class="donate-options">
+        <a class="donate-option-btn donate-option-kofi" href="https://ko-fi.com/vanzz69" target="_blank" rel="noopener noreferrer">
+          <span class="donate-option-btn-icon">☕</span>
+          <div>
+            <div class="donate-option-btn-title">Donate via Ko-fi</div>
+            <div class="donate-option-btn-sub">Card or PayPal · Any currency</div>
           </div>
-          <div class="upi-fallback">
-            <span class="upi-fallback-label">Or copy UPI ID manually</span>
-            <div class="upi-copy-row">
-              <span class="upi-id-text">vanshnarayantiwari5@okicici</span>
-              <button class="upi-copy-btn" id="copyUpiBtn">Copy</button>
-            </div>
+          <span class="donate-option-btn-arrow">→</span>
+        </a>
+        <button class="donate-option-btn donate-option-upi" id="openUpiViewBtn">
+          <span class="donate-option-btn-icon">₹</span>
+          <div>
+            <div class="donate-option-btn-title">Donate via UPI</div>
+            <div class="donate-option-btn-sub">GPay · PhonePe · Paytm · Any UPI app</div>
           </div>
-        </div>
-
-        <div class="donate-divider"><span>or</span></div>
-
-        <!-- Ko-fi -->
-        <div class="donate-option">
-          <div class="donate-option-title">☕ Ko-fi</div>
-          <div class="donate-option-sub">Card or PayPal · Any currency · Works worldwide</div>
-          <a class="btn-donate-action btn-donate-kofi" href="https://ko-fi.com/vanzz69" target="_blank" rel="noopener noreferrer">Open Ko-fi →</a>
-        </div>
-
+          <span class="donate-option-btn-arrow">→</span>
+        </button>
       </div>
+
+      <!-- UPI sub-view -->
+      <div id="donateUpiView" class="donate-upi-view" style="display:none">
+        <button class="donate-back-btn" id="donateBackBtn">← Back</button>
+        <p class="donate-upi-heading">Open your UPI app directly</p>
+        <div class="upi-app-btns">
+          <a class="upi-app-btn" href="tez://upi/pay?pa=vanzz-momentum@ibl&pn=Momentum&cu=INR">
+            <span class="upi-app-icon" style="background:#1a73e8">G</span>
+            <span>GPay</span>
+          </a>
+          <a class="upi-app-btn" href="phonepe://pay?pa=vanzz-momentum@ibl&pn=Momentum&cu=INR">
+            <span class="upi-app-icon" style="background:#5f259f">Pe</span>
+            <span>PhonePe</span>
+          </a>
+          <a class="upi-app-btn" href="paytmmp://pay?pa=vanzz-momentum@ibl&pn=Momentum&cu=INR">
+            <span class="upi-app-icon" style="background:#00b9f1">Pt</span>
+            <span>Paytm</span>
+          </a>
+        </div>
+        <div class="upi-fallback">
+          <span class="upi-fallback-label">Or copy UPI ID manually</span>
+          <div class="upi-copy-row">
+            <span class="upi-id-text">vanzz-momentum@ibl</span>
+            <button class="upi-copy-btn" id="copyUpiBtn">Copy</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
