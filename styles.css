@@ -1074,3 +1074,145 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .stat-card__accent--pink { background: rgba(244,114,182,.12); color: #f472b6; }
 .mini-fill--green { background: linear-gradient(90deg, var(--green), rgba(52,211,153,.4)); }
 .mini-fill--red   { background: linear-gradient(90deg, var(--red),   rgba(248,113,113,.4)); }
+
+/* ── SUPPORT BUTTON ──────────────────────────────────────── */
+.btn-support {
+  display: block; width: 100%; text-align: center;
+  padding: var(--sp-2) var(--sp-3); margin-top: var(--sp-2);
+  background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.25);
+  color: #fbbf24; border-radius: var(--r-md);
+  font-size: .85rem; font-weight: 600; cursor: pointer;
+  transition: all var(--t-fast);
+}
+.btn-support:hover { background: rgba(251,191,36,.18); }
+.sidebar-donate-note {
+  font-size: .7rem; color: var(--text-3); text-align: center;
+  margin: var(--sp-1) 0 0; line-height: 1.4;
+}
+
+/* ── DONATION MODAL ──────────────────────────────────────── */
+.modal--donate .modal-body { padding-top: var(--sp-2); }
+.donate-intro {
+  font-size: .88rem; color: var(--text-2); line-height: 1.6;
+  margin-bottom: var(--sp-5);
+}
+.donate-options { display: flex; flex-direction: column; gap: 0; }
+.donate-option {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: var(--r-lg); padding: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.donate-option-header { display: flex; align-items: center; gap: var(--sp-3); }
+.donate-option-flag { font-size: 1.5rem; }
+.donate-option-title { font-weight: 700; font-size: .95rem; color: var(--text); }
+.donate-option-sub { font-size: .75rem; color: var(--text-3); margin-top: 2px; }
+.donate-upi-id {
+  font-family: monospace; font-size: .9rem; color: var(--accent);
+  background: rgba(124,107,255,.08); border: 1px solid rgba(124,107,255,.2);
+  border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
+  text-align: center; letter-spacing: .02em;
+}
+.btn-donate-action {
+  display: block; width: 100%; text-align: center;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md);
+  background: rgba(124,107,255,.15); border: 1px solid rgba(124,107,255,.3);
+  color: var(--accent); font-size: .88rem; font-weight: 600;
+  cursor: pointer; transition: all var(--t-fast); text-decoration: none;
+}
+.btn-donate-action:hover { background: rgba(124,107,255,.25); }
+.btn-donate-kofi {
+  background: rgba(255,94,58,.1); border-color: rgba(255,94,58,.3);
+  color: #ff5e3a;
+}
+.btn-donate-kofi:hover { background: rgba(255,94,58,.2); }
+.donate-divider {
+  display: flex; align-items: center; gap: var(--sp-3);
+  color: var(--text-3); font-size: .8rem; padding: var(--sp-3) 0;
+}
+.donate-divider::before, .donate-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ── PWA INSTALL BANNER ──────────────────────────────────── */
+.pwa-banner {
+  position: fixed; bottom: 72px; left: 12px; right: 12px;
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-4);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,.4);
+  animation: slideUp .3s ease;
+}
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.pwa-banner-content { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0; }
+.pwa-banner-icon { font-size: 1.4rem; flex-shrink: 0; }
+.pwa-banner-text { display: flex; flex-direction: column; min-width: 0; }
+.pwa-banner-text strong { font-size: .88rem; color: var(--text); }
+.pwa-banner-text span { font-size: .75rem; color: var(--text-3); margin-top: 1px; }
+.pwa-banner-actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.pwa-install-btn {
+  padding: var(--sp-1) var(--sp-3); background: var(--accent);
+  color: white; border: none; border-radius: var(--r-md);
+  font-size: .82rem; font-weight: 600; cursor: pointer;
+}
+.pwa-dismiss-btn {
+  background: none; border: none; color: var(--text-3);
+  font-size: 1rem; cursor: pointer; padding: 4px; line-height: 1;
+}
+@media (min-width: 701px) {
+  .pwa-banner { bottom: 20px; max-width: 420px; left: 50%; transform: translateX(-50%); right: auto; }
+}
+
+/* ── SOMEDAY TASKS ───────────────────────────────────────── */
+.someday-header { margin-bottom: var(--sp-4); }
+.someday-title { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700; color: var(--text); margin: 0 0 4px; }
+.someday-sub { font-size: .8rem; color: var(--text-3); margin: 0; }
+.someday-card { cursor: default; }
+.someday-actions { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; flex-shrink: 0; }
+.someday-move-btn {
+  font-size: .75rem; padding: 3px 10px; border-radius: var(--r-sm);
+  background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.25);
+  color: var(--green); cursor: pointer; font-weight: 600; white-space: nowrap;
+  transition: all var(--t-fast);
+}
+.someday-move-btn:hover { background: rgba(52,211,153,.2); }
+
+/* ── ONBOARDING — iOS + Donate steps ────────────────────── */
+.ob-install-steps {
+  text-align: left; margin: var(--sp-4) auto;
+  max-width: 280px; display: flex; flex-direction: column; gap: var(--sp-3);
+  padding-left: var(--sp-4);
+}
+.ob-install-steps li {
+  font-size: .9rem; color: var(--text-2); line-height: 1.5;
+}
+.ob-install-steps strong { color: var(--text); }
+.ob-share-icon {
+  display: inline-block; font-size: 1rem;
+  background: rgba(255,255,255,.1); border-radius: 4px;
+  padding: 0 4px; margin: 0 2px;
+}
+.ob-install-note {
+  font-size: .78rem; color: var(--text-3); margin-top: var(--sp-2);
+}
+.ob-donate-btns {
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  margin: var(--sp-4) auto; max-width: 260px;
+}
+.ob-donate-btn {
+  display: block; padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md); font-size: .9rem; font-weight: 600;
+  text-align: center; text-decoration: none; transition: all var(--t-fast);
+}
+.ob-donate-upi {
+  background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.3);
+  color: var(--green);
+}
+.ob-donate-upi:hover { background: rgba(52,211,153,.2); }
+.ob-donate-kofi {
+  background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.25);
+  color: #fbbf24;
+}
+.ob-donate-kofi:hover { background: rgba(251,191,36,.18); }
+.ob-donate-skip {
+  font-size: .78rem; color: var(--text-3); margin-top: var(--sp-2);
+}
