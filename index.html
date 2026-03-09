@@ -63,11 +63,11 @@
         <div class="onboarding-step" data-step="5">
           <div class="onboarding-emoji">☕</div>
           <h2>Momentum is Free</h2>
-          <p>And always will be. But if it helps you build better habits, a small donation keeps the servers running and means a lot.</p>
+          <p>And always will be. But Firebase — the service that syncs your data across devices — has real costs. If Momentum helps you, a small donation keeps it running.</p>
           <div class="ob-donate-btns">
-            <a class="ob-donate-btn ob-donate-upi" href="upi://pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR" target="_blank">
-              🇮🇳 Donate via UPI
-            </a>
+            <button class="ob-donate-btn ob-donate-upi" id="obUpiBtn">
+              Donate via UPI
+            </button>
             <a class="ob-donate-btn ob-donate-kofi" href="https://ko-fi.com/vanzz69" target="_blank" rel="noopener noreferrer">
               ☕ Donate via Ko-fi
             </a>
@@ -498,30 +498,45 @@
       <button class="modal-close" id="donateModalClose">✕</button>
     </div>
     <div class="modal-body">
-      <p class="donate-intro">Momentum is free and always will be. If it's helped you build better habits, a small contribution keeps the servers running and motivates me to keep improving it. 🙏</p>
+      <p class="donate-intro">Momentum is free and always will be. Firebase — which syncs your data across devices — has real costs. If it's helped you, a small contribution keeps it running. 🙏</p>
       <div class="donate-options">
+
+        <!-- UPI -->
         <div class="donate-option">
-          <div class="donate-option-header">
-            <span class="donate-option-flag">🇮🇳</span>
-            <div>
-              <div class="donate-option-title">Pay via UPI</div>
-              <div class="donate-option-sub">Instant · Zero fees · Any UPI app</div>
+          <div class="donate-option-title">Pay via UPI</div>
+          <div class="donate-option-sub">Open your preferred app directly</div>
+          <div class="upi-app-btns">
+            <a class="upi-app-btn" href="tez://upi/pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Google_Pay_Logo.svg/512px-Google_Pay_Logo.svg.png" alt="GPay" />
+              <span>GPay</span>
+            </a>
+            <a class="upi-app-btn" href="phonepe://pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/PhonePe_Logo.svg/512px-PhonePe_Logo.svg.png" alt="PhonePe" />
+              <span>PhonePe</span>
+            </a>
+            <a class="upi-app-btn" href="paytmmp://pay?pa=vanshnarayantiwari5@okicici&pn=Momentum&cu=INR">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Paytm_Logo_%28standalone%29.svg/512px-Paytm_Logo_%28standalone%29.svg.png" alt="Paytm" />
+              <span>Paytm</span>
+            </a>
+          </div>
+          <div class="upi-fallback">
+            <span class="upi-fallback-label">Or copy UPI ID manually</span>
+            <div class="upi-copy-row">
+              <span class="upi-id-text">vanshnarayantiwari5@okicici</span>
+              <button class="upi-copy-btn" id="copyUpiBtn">Copy</button>
             </div>
           </div>
-          <div class="donate-upi-id" id="upiIdCopy">vanshnarayantiwari5@okicici</div>
-          <button class="btn-donate-action" id="copyUpiBtn">Copy UPI ID</button>
         </div>
+
         <div class="donate-divider"><span>or</span></div>
+
+        <!-- Ko-fi -->
         <div class="donate-option">
-          <div class="donate-option-header">
-            <span class="donate-option-flag">🌍</span>
-            <div>
-              <div class="donate-option-title">International — Ko-fi</div>
-              <div class="donate-option-sub">Card or PayPal · Any currency</div>
-            </div>
-          </div>
+          <div class="donate-option-title">☕ Ko-fi</div>
+          <div class="donate-option-sub">Card or PayPal · Any currency · Works worldwide</div>
           <a class="btn-donate-action btn-donate-kofi" href="https://ko-fi.com/vanzz69" target="_blank" rel="noopener noreferrer">Open Ko-fi →</a>
         </div>
+
       </div>
     </div>
   </div>
