@@ -1257,3 +1257,22 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   transition: opacity var(--t-fast);
 }
 .upi-copy-btn:hover { opacity: .85; }
+
+/* ── UPI APP BUTTONS — fixes ─────────────────────────────── */
+.upi-app-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem; font-weight: 800; color: #fff;
+  flex-shrink: 0;
+}
+/* Remove old img rule */
+.upi-app-btn img { display: none; }
+
+/* Donate modal — constrain width on desktop */
+.modal--donate { max-width: 420px; }
+.modal--donate .modal-body { padding-top: var(--sp-4); }
+.donate-option-title {
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  font-size: .95rem; color: var(--text); margin-bottom: 2px;
+}
+.donate-option-sub { font-size: .78rem; color: var(--text-3); margin-bottom: var(--sp-3); }
