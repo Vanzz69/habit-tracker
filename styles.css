@@ -78,11 +78,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   border-radius: var(--r-xl);
   padding: var(--sp-10) var(--sp-8);
   width: min(420px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   display: flex; flex-direction: column; gap: var(--sp-8);
-  overflow: hidden; position: relative;
+  position: relative;
 }
-.onboarding-steps { position: relative; min-height: 180px; }
+.onboarding-steps { position: relative; min-height: 280px; }
 .onboarding-step {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center;
@@ -1216,3 +1218,42 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .ob-donate-skip {
   font-size: .78rem; color: var(--text-3); margin-top: var(--sp-2);
 }
+
+/* ── UPI APP BUTTONS ─────────────────────────────────────── */
+.upi-app-btns {
+  display: flex; gap: var(--sp-3); justify-content: center;
+  margin: var(--sp-4) 0;
+}
+.upi-app-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-3); border: 1px solid var(--border-2);
+  border-radius: var(--r-md); text-decoration: none;
+  color: var(--text-2); font-size: .75rem; font-weight: 600;
+  transition: all var(--t-fast); min-width: 72px;
+}
+.upi-app-btn:hover { border-color: var(--accent); color: var(--text); transform: translateY(-2px); }
+.upi-app-btn img {
+  width: 36px; height: 36px; object-fit: contain; border-radius: 8px;
+}
+.upi-fallback {
+  border-top: 1px solid var(--border); padding-top: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.upi-fallback-label { font-size: .75rem; color: var(--text-3); display: block; margin-bottom: var(--sp-2); }
+.upi-copy-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  background: var(--surface-3); border: 1px solid var(--border-2);
+  border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3);
+}
+.upi-id-text {
+  flex: 1; font-size: .82rem; color: var(--text-2);
+  font-family: monospace; letter-spacing: .01em;
+}
+.upi-copy-btn {
+  background: var(--accent); color: #fff; border: none;
+  border-radius: var(--r-sm); padding: 4px 12px;
+  font-size: .78rem; font-weight: 600; cursor: pointer;
+  transition: opacity var(--t-fast);
+}
+.upi-copy-btn:hover { opacity: .85; }
